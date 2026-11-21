@@ -1,0 +1,296 @@
+{
+  "textureDensity": 2,
+  "types": {
+    "forest": {
+      "groundColor": "#97b187",
+      "soilColor": "#634937"
+    },
+    "hill": {
+      "groundColor": "#b0b37c",
+      "soilColor": "#8c664d"
+    },
+    "marsh": {
+      "groundColor": "#77a8a5",
+      "soilColor": "#836c58"
+    },
+    "meadow": {
+      "groundColor": "#a5ba8c",
+      "soilColor": "#705745"
+    },
+    "thicket": {
+      "groundColor": "#415134",
+      "soilColor": "#4b382a"
+    },
+    "water": {
+      "groundColor": "#73b2b1",
+      "soilColor": "#5a4c42",
+      "bankColor": "#98c9cd"
+    }
+  },
+  "variants": {
+    "forest-1": {
+      "type": "forest",
+      "variant": 1,
+      "faceWidth": 1749,
+      "faceHeight": 1084,
+      "projectionRatio": 1.613,
+      "kind": "props",
+      "file": "props-forest-1.png",
+      "width": 92,
+      "height": 77,
+      "anchorX": 0.49921,
+      "anchorY": 0.66824
+    },
+    "forest-2": {
+      "type": "forest",
+      "variant": 2,
+      "faceWidth": 1749,
+      "faceHeight": 1087,
+      "projectionRatio": 1.609,
+      "kind": "props",
+      "file": "props-forest-2.png",
+      "width": 92,
+      "height": 77,
+      "anchorX": 0.49921,
+      "anchorY": 0.66824
+    },
+    "forest-3": {
+      "type": "forest",
+      "variant": 3,
+      "faceWidth": 1749,
+      "faceHeight": 1090,
+      "projectionRatio": 1.605,
+      "kind": "props",
+      "file": "props-forest-3.png",
+      "width": 92,
+      "height": 77,
+      "anchorX": 0.49921,
+      "anchorY": 0.66793
+    },
+    "forest-4": {
+      "type": "forest",
+      "variant": 4,
+      "faceWidth": 1749,
+      "faceHeight": 1090,
+      "projectionRatio": 1.605,
+      "kind": "props",
+      "file": "props-forest-4.png",
+      "width": 123,
+      "height": 77,
+      "anchorX": 0.49703,
+      "anchorY": 0.66793
+    },
+    "hill-1": {
+      "type": "hill",
+      "variant": 1,
+      "faceWidth": 1560,
+      "faceHeight": 992,
+      "projectionRatio": 1.573,
+      "kind": "props",
+      "file": "props-hill-1.png",
+      "width": 93,
+      "height": 53,
+      "anchorX": 0.48014,
+      "anchorY": 0.83981
+    },
+    "hill-2": {
+      "type": "hill",
+      "variant": 2,
+      "faceWidth": 1561,
+      "faceHeight": 1001,
+      "projectionRatio": 1.559,
+      "kind": "props",
+      "file": "props-hill-2.png",
+      "width": 68,
+      "height": 44,
+      "anchorX": 0.65,
+      "anchorY": 0.90758
+    },
+    "hill-3": {
+      "type": "hill",
+      "variant": 3,
+      "faceWidth": 1561,
+      "faceHeight": 998,
+      "projectionRatio": 1.564,
+      "kind": "props",
+      "file": "props-hill-3.png",
+      "width": 83,
+      "height": 49,
+      "anchorX": 0.53297,
+      "anchorY": 0.83277
+    },
+    "hill-4": {
+      "type": "hill",
+      "variant": 4,
+      "faceWidth": 1561,
+      "faceHeight": 997,
+      "projectionRatio": 1.566,
+      "kind": "props",
+      "file": "props-hill-4.png",
+      "width": 84,
+      "height": 60,
+      "anchorX": 0.5299,
+      "anchorY": 0.74143
+    },
+    "marsh-1": {
+      "type": "marsh",
+      "variant": 1,
+      "faceWidth": 1811,
+      "faceHeight": 1179,
+      "projectionRatio": 1.536,
+      "kind": "splat",
+      "file": "splat-marsh-1.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "marsh-2": {
+      "type": "marsh",
+      "variant": 2,
+      "faceWidth": 1811,
+      "faceHeight": 1177,
+      "projectionRatio": 1.539,
+      "kind": "splat",
+      "file": "splat-marsh-2.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "marsh-3": {
+      "type": "marsh",
+      "variant": 3,
+      "faceWidth": 1811,
+      "faceHeight": 1181,
+      "projectionRatio": 1.533,
+      "kind": "splat",
+      "file": "splat-marsh-3.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "marsh-4": {
+      "type": "marsh",
+      "variant": 4,
+      "faceWidth": 1811,
+      "faceHeight": 1179,
+      "projectionRatio": 1.536,
+      "kind": "splat",
+      "file": "splat-marsh-4.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "meadow-1": {
+      "type": "meadow",
+      "variant": 1,
+      "faceWidth": 1718,
+      "faceHeight": 1079,
+      "projectionRatio": 1.592,
+      "kind": "splat",
+      "file": "splat-meadow-1.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "meadow-2": {
+      "type": "meadow",
+      "variant": 2,
+      "faceWidth": 1718,
+      "faceHeight": 1080,
+      "projectionRatio": 1.591,
+      "kind": "splat",
+      "file": "splat-meadow-2.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "meadow-3": {
+      "type": "meadow",
+      "variant": 3,
+      "faceWidth": 1718,
+      "faceHeight": 1076,
+      "projectionRatio": 1.597,
+      "kind": "splat",
+      "file": "splat-meadow-3.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "meadow-4": {
+      "type": "meadow",
+      "variant": 4,
+      "faceWidth": 1718,
+      "faceHeight": 1077,
+      "projectionRatio": 1.595,
+      "kind": "splat",
+      "file": "splat-meadow-4.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "thicket-1": {
+      "type": "thicket",
+      "variant": 1,
+      "faceWidth": 1818,
+      "faceHeight": 1150,
+      "projectionRatio": 1.58,
+      "kind": "props",
+      "file": "props-thicket-1.png",
+      "width": 129,
+      "height": 96,
+      "anchorX": 0.5,
+      "anchorY": 0.60286
+    },
+    "thicket-2": {
+      "type": "thicket",
+      "variant": 2,
+      "faceWidth": 1818,
+      "faceHeight": 1150,
+      "projectionRatio": 1.58,
+      "kind": "props",
+      "file": "props-thicket-2.png",
+      "width": 129,
+      "height": 107,
+      "anchorX": 0.5,
+      "anchorY": 0.64458
+    },
+    "thicket-3": {
+      "type": "thicket",
+      "variant": 3,
+      "faceWidth": 1818,
+      "faceHeight": 1150,
+      "projectionRatio": 1.58,
+      "kind": "props",
+      "file": "props-thicket-3.png",
+      "width": 129,
+      "height": 96,
+      "anchorX": 0.49946,
+      "anchorY": 0.60294
+    },
+    "thicket-4": {
+      "type": "thicket",
+      "variant": 4,
+      "faceWidth": 1730,
+      "faceHeight": 1094,
+      "projectionRatio": 1.58,
+      "kind": "props",
+      "file": "props-thicket-4.png",
+      "width": 129,
+      "height": 92,
+      "anchorX": 0.49943,
+      "anchorY": 0.58691
+    },
+    "water-1": {
+      "type": "water",
+      "variant": 1,
+      "faceWidth": 1718,
+      "faceHeight": 1075,
+      "projectionRatio": 1.598,
+      "kind": "splat",
+      "file": "splat-water-1.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    }
+  }
+}
