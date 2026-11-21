@@ -1,0 +1,137 @@
+{
+  "textureDensity": 4,
+  "sprites": {
+    "cottage": {
+      "file": "cottage.png",
+      "width": 276,
+      "height": 255,
+      "anchorX": 0.46977,
+      "anchorY": 0.99115,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ]
+    },
+    "sawmill": {
+      "file": "sawmill.png",
+      "width": 531,
+      "height": 411,
+      "anchorX": 0.49945,
+      "anchorY": 0.98004,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ]
+    },
+    "quarry": {
+      "file": "quarry.png",
+      "width": 534,
+      "height": 400,
+      "anchorX": 0.49946,
+      "anchorY": 0.96524,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ]
+    },
+    "market": {
+      "file": "market.png",
+      "width": 673,
+      "height": 515,
+      "anchorX": 0.48026,
+      "anchorY": 0.99243,
+      "baseWidth": 640.0,
+      "footprint": [
+        3,
+        2
+      ]
+    },
+    "library": {
+      "file": "library.png",
+      "width": 538,
+      "height": 559,
+      "anchorX": 0.49725,
+      "anchorY": 0.97706,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ]
+    },
+    "pier": {
+      "file": "pier.png",
+      "width": 394,
+      "height": 241,
+      "anchorX": 0.49638,
+      "anchorY": 0.95626,
+      "baseWidth": 384.0,
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "townHall": {
+      "file": "townhall.png",
+      "width": 822,
+      "height": 869,
+      "anchorX": 0.51733,
+      "anchorY": 0.98473,
+      "baseWidth": 768.0,
+      "footprint": [
+        3,
+        3
+      ]
+    },
+    "park": {
+      "file": "park.png",
+      "width": 541,
+      "height": 468,
+      "anchorX": 0.4994,
+      "anchorY": 0.96799,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ]
+    },
+    "greenhouse": {
+      "file": "greenhouse.png",
+      "width": 684,
+      "height": 625,
+      "anchorX": 0.51713,
+      "anchorY": 0.97203,
+      "baseWidth": 640.0,
+      "footprint": [
+        3,
+        2
+      ]
+    },
+    "tavern": {
+      "file": "tavern.png",
+      "width": 535,
+      "height": 545,
+      "anchorX": 0.49912,
+      "anchorY": 0.97939,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ]
+    },
+    "wizardTower": {
+      "file": "wizardtower.png",
+      "width": 543,
+      "height": 981,
+      "anchorX": 0.49949,
+      "anchorY": 0.9832,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ]
+    }
+  }
+}
