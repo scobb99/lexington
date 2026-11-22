@@ -215,10 +215,12 @@ export interface PolishArt {
 
 // prettier-ignore
 export const POLISH_ART: PolishArt[] = [
-  { id: 'hill-peak', use: 'hillPeak', file: 'props-hill-peak.png', anchorX: 0.5, anchorY: 0.82, tiles: 2.6, fallback: 'hill-4', note: 'mountain peak for hill patches of 4+ tiles' },
-  { id: 'forest-canopy-1', use: 'forestCanopy', file: 'props-forest-canopy-1.png', anchorX: 0.5, anchorY: 0.8, tiles: 1.9, fallback: 'forest-1', note: 'continuous canopy for big forest interiors' },
-  { id: 'forest-canopy-2', use: 'forestCanopy', file: 'props-forest-canopy-2.png', anchorX: 0.5, anchorY: 0.8, tiles: 1.9, fallback: 'forest-3', note: 'second canopy piece' },
-  { id: 'tree-large-1', use: 'treeLarge', file: 'props-tree-large-1.png', anchorX: 0.5, anchorY: 0.9, tiles: 1.2, fallback: null, note: 'larger single tree for forest edges' },
-  { id: 'edge-marsh-1', use: 'marshEdge', file: 'splat-edge-marsh-1.png', anchorX: 0.5, anchorY: 0.5, tiles: 1.6, fallback: null, note: 'soft marsh-to-meadow transition' },
-  { id: 'edge-water-1', use: 'waterEdge', file: 'splat-edge-water-1.png', anchorX: 0.5, anchorY: 0.5, tiles: 1.6, fallback: null, note: 'soft water bank transition' },
+  // Delivered Nov 22, 2026 (Gemini names in brackets). Anchors below are defaults: the measured
+  // anchors in terrain.json "polish" win. `tiles` = width of the piece's ground part, in tiles.
+  { id: 'hill-peak', use: 'hillPeak', file: 'props-hill-peak.png', anchorX: 0.5, anchorY: 0.632, tiles: 2.6, fallback: 'hill-4', note: '[terrain-peak] mountain peak for hill patches of 4+ tiles (width grows with the patch)' },
+  { id: 'forest-canopy-1', use: 'forestCanopy', file: 'props-forest-canopy-1.png', anchorX: 0.507, anchorY: 0.667, tiles: 1.85, fallback: 'forest-1', note: '[terrain-canopy-1] continuous canopy for big forest interiors' },
+  { id: 'forest-canopy-2', use: 'forestCanopy', file: 'props-forest-canopy-2.png', anchorX: 0.491, anchorY: 0.668, tiles: 1.85, fallback: 'forest-3', note: '[terrain-canopy-2] second canopy piece' },
+  { id: 'tree-large-1', use: 'treeLarge', file: 'props-tree-large-1.png', anchorX: 0.489, anchorY: 0.874, tiles: 0.8, fallback: null, note: '[terrain-tree-large] large single tree for forest edges and lone forest tiles' },
+  { id: 'edge-marsh-1', use: 'marshEdge', file: 'splat-edge-marsh-1.png', anchorX: 0.5, anchorY: 0.5, tiles: 1.5, fallback: null, note: '[terrain-edge-marsh] marsh-to-meadow bank detail' },
+  { id: 'edge-water-1', use: 'waterEdge', file: 'splat-edge-water-1.png', anchorX: 0.5, anchorY: 0.5, tiles: 1.5, fallback: null, note: '[terrain-edge-water] water bank detail' },
 ];
