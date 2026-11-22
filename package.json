@@ -1,8 +1,8 @@
 {
-  "name": "wordcity",
+  "name": "lexington",
   "private": true,
-  "version": "1.0.0",
-  "description": "A cozy word-driven city builder (Build Spec v1.8).",
+  "version": "2.0.0",
+  "description": "Lexington: a cozy word-driven city builder (Build Spec v2.0).",
   "type": "module",
   "engines": {
     "node": ">=18"

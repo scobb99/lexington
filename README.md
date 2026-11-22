@@ -1,58 +1,80 @@
-# WordCity
+# Lexington
 
-A cozy, word-driven city builder. Built to **Build Spec v1.8**.
+A cozy, word-driven city builder. Built to **Build Spec v2.0** (with the amendment naming the game Lexington).
 
-**Status: Phase 4, the last build phase.** Everything in the spec is built:
+**Status: v2.0 is built.** New in v2.0:
 
-- The seeded 54 × 54 map in a three-quarter isometric view (64 × 40 tiles), painted once into a single texture using the approved Gemini terrain art and its variants.
-- The word game, with real rewards, rerolls, and the free reroll when no word is possible.
-- **Building your town:** roads, bridges, clearing forest (2 Coins a tile), all 11 buildings placed by the Section 7 rules, and removal with a refund shown first.
-- **Growing your town:** three tiers, the 8-quest chain with rewards, and happiness and population shown at the top.
-- **Saves:** your town saves itself as you play, and comes back when you return. There are three manual save slots, plus Export and Import of a town file.
-- **Desktop and phone layouts.** On a narrow screen (under 768 px) the map fills the screen and the panels move out of the way.
-- The dark interface.
-
-What's left before launch is one check with the real Pixi and Vite tools (see "For developers"), then putting it online.
+- **Title screen** with Continue, New Town, How to Play and Saves.
+- **How to Play:** a two-minute guided first town (11 steps, on the fixed map "hearth"). It never touches your saved town.
+- **Roads and bridges are previewed first.** You draw, see the total, then tap **Confirm**. Nothing is charged while drawing.
+- **Building ghost:** a see-through building shows where it will go. Green means it can go there; red says why not. Nothing is charged until **Confirm**.
+- **Build cards** say what each building costs, what it does, and where it can go.
+- **One way to spell:** tap letter tiles (or type on a computer keyboard). The word box is never a text box, so a phone keyboard never pops up.
+- **Word tools:**
+  - a **delete** key: tap to remove the last letter, hold to clear the word;
+  - **Hint:** free, three steps from length to the full word;
+  - **Swap:** 2 Coins a tile.
+- **Changing the land:**
+  - **Clear** thicket for 6 Coins and 3 Lumber a tile.
+  - **Drain** marsh into meadow from Tier 2, for 5 Coins and 2 Lumber a tile.
+  - Marsh now needs a **bridge** to cross.
+- **New economy:** production buildings pay more and carry the town (Section 6).
+- **Prettier ground:**
+  - softer edges where land meets water and marsh;
+  - forests read as one canopy;
+  - big hills get a peak;
+  - buildings sit on soft shadows.
+- **Gemini art** for the game icon, the letter tiles, the resource icons, and the river (four water styles).
 
 ## How to play (controls)
 
+### Starting
+
+- **Continue:** back to your town, just as you left it. It only shows when there is a saved town.
+- **New Town:** a fresh map. If you already have a saved town, type **NEW** to confirm, because the autosave is replaced. Your three save slots are kept. You can type a map seed, or leave it empty for a surprise map.
+- **How to Play:** the tutorial. You can **Skip tutorial** at any step.
+- **Saves:** load a slot, export a slot to a file, or import a town file.
+
 ### On a computer
 
-- **Look around:** drag the map, or scroll or pinch to zoom.
-- **Make a word:** type it and press **Enter**, or click letter tiles and then **Submit**.
-- **Build a road:** click **Road** in the Build panel, then drag across land. Each tile costs 1 Coin.
-- **Build a bridge:** click **Bridge**, then drag across the river. Each tile costs 3 Coins and 2 Lumber.
-- **Open up forest:** click **Clear forest**, then drag over forest tiles. Each tile costs 2 Coins.
-- **Place a building:** click it in the Build panel, then click the map.
-  - Green footprint: the spot is allowed. Red: it isn't; click anyway to see the reason.
-- **Remove something:** click **Remove**, then click a road, bridge, or building.
-- **Put the tool down:** press **Esc**.
-- **Pan while using a tool:** drag with the right mouse button, or with two fingers.
+- **Look around:** drag the map, or scroll to zoom.
+- **Spell a word:** click letter tiles, or just type letters on the keyboard; nothing needs to be selected first.
+  - **Backspace** removes the last letter.
+  - **Enter** plays the word.
+  - Click a letter in the word box to take that one back.
+- **Hint:** click once to hear the length, twice to place the first letter, three times to see the word.
+- **Swap:** click **Swap**, click the tiles you want to replace, then click **Swap 3 tiles for 6 Coins** (the button shows the count). **Cancel** or **Esc** gets out of it free.
+- **Road:**
+  1. Click **Road**.
+  2. Drag across land. The path shows see-through; a red tile can't take a road, and the bar says why.
+  3. Click **Confirm**, or press **Enter**.
 
-### Quests, tiers and happiness
+  **Cancel**, **Esc** or a right-click throws the path away for free. To add more, start a new drag from the end of the path.
+- **Bridge:** same as Road, over water or marsh.
+- **Clear / Drain:** click the tool, then click one tile at a time. The panel shows the cost of the tile under the mouse.
+- **Place a building:**
+  1. Click its card. The ghost follows the mouse.
+  2. Click to pin it.
+  3. Click **Confirm**, or press **Enter**.
 
-- The **Town** card at the top of the right-hand panel shows the current quest, its progress bars and its reward, and a checklist for the next tier.
-- Quests and tier unlocks pay out on their own the moment they are done. A gold message announces them.
-- Click the **Happy** chip at the top right to see how happiness is worked out and what it does to word rewards. Click anywhere else to close it.
-
-### Saving your town
-
-- **Autosave:** the game saves itself one second after every change. Close the tab whenever you like; next time you open the game, your town is just as you left it.
-- **Saves button** (top right on a computer, next to Build on a phone) opens the Saves panel:
-  - **Slot 1 to 3:** *Save here* keeps a copy of your town. *Load* brings it back (it asks first, because it replaces your current town). A filled slot says *Replace*, and asks before overwriting.
-  - **Export** downloads your town as one file (for example `wordcity-town-2026-11-20.json`). **Import** loads a file like that back in, on this or another computer or phone.
-  - **New town** starts a fresh map. It deletes the autosave (your three slots are kept), so you must type **NEW** first. You can also type a map seed.
-- Saves live in this browser on this device. To move a town to another device, Export it on the old one and Import it on the new one.
-- A save that is damaged or from a newer version is never loaded: you get a plain message and your town is unchanged.
+  **Cancel** unpins it; **Esc** stops placing.
+- **Menu** (top right): Saves, How to Play, and Title Screen. Both of the last two save your town first.
 
 ### On a phone
 
-- **Make a word:** tap letter tiles in order, then tap **Submit**. Tap a used tile again to take its letter back. You can also type in the box.
-- **Build:** tap the **Build** button (top right) to slide up the Build panel. The Town card with quests is at the top of it.
-- Pick a tool or building. The panel closes and a **Using …** chip appears; drag or tap on the map. Tap **Done** to put the tool down.
-- **Look around:** drag with one finger (when no tool is chosen), pinch with two fingers to zoom. With a tool chosen, two fingers pan.
-- Tap the **☺** number in the top bar for the happiness breakdown.
-- Tap **Saves** (next to Build) for the save slots, Export, Import and New town.
+- **Spell a word:** tap letter tiles, then **Submit**.
+  - The **delete** key removes the last letter; hold it for half a second to clear the word.
+  - Tap a letter in the word box to take it back.
+- **Build:** tap **Build** to slide up the panel, then pick a tool or a building. The panel closes and a chip shows the tool; **Done** puts it down.
+- **Roads:** drag with one finger, then tap **Confirm** in the bar above the letters.
+- **Buildings:** drag the ghost with your finger (the map doesn't move while you do). Lift your finger to pin it, then tap **Confirm**.
+- **Look around:** one finger drags the map when no tool is in use; two fingers pinch to zoom.
+
+### Saving
+
+- **Autosave:** your town saves itself one second after every change, and when you close the tab.
+- **Menu → Saves:** three slots, Export and Import of one town file, and New town.
+- **Older towns:** a town saved by the earlier version (WordCity) still loads. Any road it had on marsh becomes a bridge, free, and a message says how many.
 
 ---
 
@@ -62,26 +84,31 @@ You only need a web browser for this.
 
 ### 1. Put the files on GitHub
 
-1. Unzip the newest zip Claude sent (for example `wordcity-phase3.zip`) on your Mac. You get a folder called `wordcity`.
-2. Go to <https://github.com/new>.
-3. Type `wordcity` as the **Repository name**. Leave everything else as it is. Click **Create repository**.
-4. On the next page, click the link that says **uploading an existing file**.
-5. Open the `wordcity` folder in Finder and select everything inside it (Command + A).
-   - Drag the selection into the GitHub page.
+1. Unzip the newest zip Claude sent (for example `lexington-v2.0.zip`) on your Mac. You get a folder called `wordcity`.
+2. Open your repository on GitHub. If it is still called `wordcity`, rename it first:
+   1. Open **Settings** (the tab at the top of the repository).
+   2. Under **Repository name**, type `lexington`.
+   3. Click **Rename**.
+3. On the repository's main page, click **Add file**, then **Upload files**.
+4. Open the `wordcity` folder in Finder and select everything inside it (Command + A). Drag the selection onto the GitHub page.
    - Drag the files *inside* the folder, not the folder itself.
-   - Some files start with a dot, like `.gitignore`, and Finder hides them. Press Command + Shift + . (period) in Finder to show them.
-6. Wait for every file to finish uploading. Then click **Commit changes**.
+   - Finder hides files that start with a dot, like `.gitignore`. Press Command + Shift + . (period) in Finder to show them.
+5. Wait for every file to finish uploading, then click **Commit changes**.
+6. One old file is not needed any more: `public/favicon.svg`. To delete it on GitHub:
+   1. Open the `public` folder and click `favicon.svg`.
+   2. Click the **⋯** menu (top right of the file), then **Delete file**.
+   3. Click **Commit changes**.
 
-### 2. Deploy on Vercel
+### 2. Vercel
 
-1. Go to <https://vercel.com/new> and sign in with GitHub.
-2. Find `wordcity` in the list and click **Import**.
-3. Vercel detects **Vite** on its own. Don't change any settings.
-4. Click **Deploy**. After a minute or two, Vercel gives you a web address for the game.
-
-### 3. Updating later
-
-When Claude sends new files, upload them to the same GitHub repository the same way (step 1, parts 4 to 6). Vercel then redeploys automatically.
+- If the project is already on Vercel, it redeploys by itself after step 1. To rename it:
+  1. Open the project on <https://vercel.com>.
+  2. Click **Settings**, then **General**.
+  3. Change **Project Name** to `lexington` and click **Save**.
+- New project:
+  1. Go to <https://vercel.com/new> and click **Import** next to the repository.
+  2. Don't change any settings; Vercel detects Vite.
+  3. Click **Deploy**.
 
 ---
 
@@ -89,17 +116,16 @@ When Claude sends new files, upload them to the same GitHub repository the same 
 
 | Add this | What it does |
 |---|---|
-| `?seed=stu` | Builds the map from the seed "stu". The same seed always gives the same map. Autosave is paused for that visit, so your real town is never replaced. (To play a seeded map for real, use **New town** in Saves and type the seed there.) |
-| `?showcase` | Places one of each of the 11 buildings on the map so you can see the art in the game. They don't count toward the economy and are never saved. Autosave is paused. |
-| `?sandbox` | Unlocks every tier and gives 9,999 of each resource, so you can try placing everything. Quests still run. Autosave is paused. For testing only. |
+| `?seed=stu` | **New Town** builds the map from the seed "stu" without deleting anything. Autosave is off for that visit, so your real town is never replaced. |
+| `?showcase` | **New Town** places one of each of the 11 buildings, so you can see the art in the game. Autosave is off. |
+| `?sandbox` | **New Town** unlocks every tier and gives 9,999 of each resource. Autosave is off. For testing only. |
 | `?testNoWebGL` | Pretends the graphics card failed, so you can see the "Reload Map" safety screen. |
 | `?testDict=corrupt` | Pretends the word list is broken, so you can see the 200-word backup list take over. |
+| `?skipTitle` | For automated tests: skips the title screen and starts a new town at once. |
 
-To combine two switches, use `&`. For example: `?seed=stu&testDict=corrupt`.
+To combine two switches, use `&`. For example: `?seed=stu&sandbox`.
 
-To try the phone layout on a computer: in Chrome, open the console (Option + Command + J), click the phone-and-tablet icon at its top left, and pick a phone such as iPhone 12 Pro (390 × 844).
-
-To check that the map was only created once: open the browser console (Option + Command + J in Chrome) and type `wordcityDebug`. `appsCreated` should stay at **1** while you type and play.
+To check the map was only created once: open the browser console (Option + Command + J in Chrome) and type `wordcityDebug`. `appsCreated` should stay at **1**.
 
 ---
 
@@ -113,19 +139,29 @@ npm run preview    # serve the production build (Section 14 requires this)
 npm run typecheck  # TypeScript check (not part of the Vercel build)
 ```
 
-- `pixi.js` is pinned to exactly `7.4.2` (Section 10), and `idb-keyval` to exactly `6.2.1` (Section 11). Commit `package-lock.json` after the first `npm install`.
-- Game state lives in `src/game/store.ts`, outside React.
-- `src/pixi/MapView.tsx` is the only component that touches Pixi. It creates the Pixi Application once.
-- The word list is `src/data/words.txt` (one lower-case word per line). It is bundled into the app and parsed after the map first paints.
-- The view is isometric (64 × 40 diamonds) over a square logic grid. The projection lives in `src/pixi/camera.ts`.
-- Building art: the approved Gemini set, keyed to PNG in `src/assets/buildings/` (anchors and sizes in `sprites.json`).
-- Terrain art: the approved Gemini tiles and variants, cut into splats and prop stamps in `src/assets/terrain/` (see `terrain.json`).
-- Where each variant goes: `src/pixi/terrainVariants.ts` (one manifest line per variant, plus the five placement rules).
-- To add a terrain variant:
-  1. Put the JPG (e.g. `terrain-water-2.jpg`) with the others.
-  2. Run `python3 -I scripts/art/process_art.py <folder of JPGs> src/assets` (needs Python with numpy, scipy and Pillow).
-  3. Add one line to the manifest.
-- Tiers and quests (Section 9) are pure rules in `src/game/progress.ts`; the store checks them after every word, build and removal. The Town card is `src/ui/TownPanel.tsx`.
-- The phone layout is CSS only (`@media (max-width: 767px)` in `src/styles.css`) plus the bottom-sheet toggle in `src/ui/BuildPanel.tsx`. The map is never remounted when the layout changes.
-- Saves (Section 11): the format and all its checks are in `src/game/save.ts` (pure, unit-tested); IndexedDB, the autosave and Export/Import are in `src/game/persistence.ts`; the panel is `src/ui/SaveMenu.tsx`. To change the save format, raise `SAVE_VERSION` and add a step to `MIGRATIONS` so old saves still load.
-- `?testHooks` exposes the game store to automated browser tests.
+- **Pinned versions:** `pixi.js` is pinned to exactly `7.4.2` (Section 10), and `idb-keyval` to exactly `6.2.1` (Section 11). Commit `package-lock.json`.
+- **The name:** it lives in one constant, `NAME` in `src/game/config.ts`.
+- **Game state** lives in `src/game/store.ts`, outside React.
+  - The rack is a list of tile objects (Section 5).
+  - Road and bridge previews, the placement ghost, Hint and Swap all live there; none of them is ever saved.
+- **The Pixi map:** `src/pixi/MapView.tsx` is the only component that touches Pixi. It is mounted once, when a town or the tutorial is first entered, and is only hidden when the player returns to the title screen.
+- **Keyboard:** one document-level listener, `src/ui/keyboard.ts`, registered once.
+- **Title screen and tutorial:**
+  - title screen: `src/ui/TitleScreen.tsx`;
+  - tutorial text and fixed data: `src/game/tutorial.ts`;
+  - tutorial flow: `src/game/tutorialFlow.ts`;
+  - caption panel: `src/ui/Tutorial.tsx`.
+- **Saves:**
+  - format version 2: `src/game/save.ts`, with `MIGRATIONS[1]` turning v1 marsh roads into bridges;
+  - IndexedDB and the tutorial flag: `src/game/persistence.ts`.
+- **Terrain polish (Section 13):** `src/pixi/terrainClusters.ts` (patches, depth, peaks) and `src/pixi/terrainBake.ts`.
+  - The future Gemini pieces already have slots in `POLISH_ART` in `src/pixi/terrainVariants.ts`.
+  - To add one, put `polish-<id>.jpg` with the other JPGs and run `python3 -I scripts/art/process_art.py <folder of JPGs> src/assets`. No code changes.
+- **UI art:** `scripts/art/process_ui.py` keys the game icon, letter tiles and resource icons into `src/assets/ui/`.
+- **Boone's scripts:** `scripts/boone/economy_sim.py` and `scripts/boone/find_tutorial_seed.mjs`. To run the simulation from the repository root:
+
+  ```bash
+  mkdir -p build-verified && ln -s ../src build-verified/src
+  python3 scripts/boone/economy_sim.py 400
+  ```
+- **Tests:** `?testHooks` exposes the store, the save functions and the tutorial flow to automated browser tests.
