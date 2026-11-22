@@ -1,6 +1,6 @@
-// The word game rules: rack, validation, and rewards.
-// Pure functions only (no React, no Pixi, no store) so they can be unit-tested and
-// reused by the Magic economy simulation (Build Spec v1.1, Section 6 playtest risk).
+// The word game rules: rack, validation, rewards, and the Hint word (Build Spec v2.0,
+// Sections 5 and 6). Pure functions only (no React, no Pixi, no store) so they can be
+// unit-tested and reused by the economy simulation.
 
 import { emptyResources, type Resources, type Tier } from './types';
 
@@ -127,7 +127,7 @@ export function baseReward(word: string): Resources {
   return {
     coins: Math.max(2, Math.floor(L / 2)), // Section 6: max(2, floor(L / 2))
     lumber: Math.max(1, Math.floor((L - V) / 3)), // Section 6: floor((L - V) / 3), minimum 1
-    stone: Math.floor((L - V) / 4), // Section 6: floor((L - V) / 4)
+    stone: Math.max(1, Math.floor((L - V) / 3)), // Section 6 (v2.0): floor((L - V) / 3), minimum 1 (was / 4, no minimum)
     knowledge: Math.ceil(V / 2), // Section 6: ceil(V / 2)
     magic: R, // Section 6: R
   };
@@ -256,3 +256,30 @@ export function ensurePlayable(
   }
   return { rack: current, freeRedraws };
 }
+
+// ---------- Section 5 (v2.0): the Hint word ----------
+
+/**
+ * The longest word that can be made from the rack, ties broken alphabetically so the answer is
+ * stable (Section 5 Hint). `words` are lower-case. Returns the word in capitals, or null.
+ */
+export function longestWord(rack: string[], minLen: number, words: Iterable<string>): string | null {
+  const have = new Array(26).fill(0);
+  for (const ch of rack) have[ch.charCodeAt(0) - 65]++;
+  const need = new Array(26);
+  let best: string | null = null;
+  outer: for (const w of words) {
+    if (w.length < minLen || w.length > rack.length) continue;
+    if (best && (w.length < best.length || (w.length === best.length && w >= best))) continue;
+    need.fill(0);
+    for (let i = 0; i < w.length; i++) {
+      const k = w.charCodeAt(i) - 97;
+      if (k < 0 || k > 25 || ++need[k] > have[k]) continue outer;
+    }
+    best = w;
+  }
+  return best ? best.toUpperCase() : null;
+}
+
+/** Section 5 (v2.0): Swap costs 2 Coins per tile. */
+export const SWAP_COST_PER_TILE = 2;

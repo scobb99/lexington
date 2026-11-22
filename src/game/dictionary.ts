@@ -1,4 +1,4 @@
-// Dictionary loading (Build Spec v1.1, Section 5, Fork B).
+// Dictionary loading (Build Spec v2.0, Section 5, Fork B).
 // The curated list ships inside the app at src/data/words.txt and is imported as raw text.
 // It is loaded with a dynamic import so it becomes its own bundled chunk, and it is parsed
 // once into a Set after the map first paints. If anything goes wrong, the game runs on the
@@ -82,7 +82,7 @@ export function loadDictionary(testMode: DictionaryTestMode = null): Promise<Dic
         count: words.size,
         problem: err instanceof Error ? err.message : String(err),
       };
-      console.warn('[WordCity] Main word list failed to load; using the 200-word fallback set.', err);
+      console.warn('[Lexington] Main word list failed to load; using the 200-word fallback set.', err);
     }
     return state;
   })();
@@ -114,4 +114,12 @@ export function resetDictionaryForTests(): void {
   words = new Set(FALLBACK_WORDS);
   state = { status: 'loading', count: words.size };
   loading = null;
+}
+
+/** Test helper only: use this word list text as if it had loaded (Node tests have no bundler). */
+export function useWordListForTests(text: string): DictionaryState {
+  words = parseWordList(text);
+  state = { status: 'ready', count: words.size };
+  loading = Promise.resolve(state);
+  return state;
 }

@@ -1,5 +1,5 @@
-// WordCity shared types and constants.
-// Every number here traces to the Build Spec v1.1 section noted beside it.
+// Lexington shared types and constants.
+// Every number here traces to the Build Spec v2.0 section noted beside it.
 
 // Section 2: logic is a square 54 x 54 grid; rendering is isometric.
 export const MAP_W = 54;
@@ -85,8 +85,22 @@ export interface Building {
   preview?: boolean;
 }
 
-/** Map tools. 'clear' clears a forest tile so roads and buildings can use it (Section 4, 7). */
-export type Tool = 'inspect' | 'road' | 'bridge' | 'clear' | 'remove' | BuildingType;
+/**
+ * Map tools (Section 4, v2.0). 'clear' clears a forest or thicket tile; 'drain' drains a marsh
+ * tile into meadow (from Tier 2). A building type means placement mode for that building.
+ */
+export type Tool = 'inspect' | 'road' | 'bridge' | 'clear' | 'drain' | 'remove' | BuildingType;
+
+/**
+ * Section 5 (v2.0): one rack tile. Selection state belongs to the tile, never to the letter.
+ * `id` is unique for the whole session (an incrementing integer). Tile ids are session state
+ * only: saves store the rack letters, and a load rebuilds tiles with fresh ids.
+ */
+export interface RackTile {
+  id: number;
+  letter: string;
+  used: boolean;
+}
 
 export type MessageKind = 'info' | 'success' | 'warn' | 'error' | 'celebrate';
 export interface GameMessage {

@@ -1,4 +1,4 @@
-// Roads and bridges (Build Spec v1.5, Section 4). Pure rules, no rendering.
+// Roads and bridges (Build Spec v2.0, Section 4). Pure rules, no rendering.
 
 import { MAP_H, MAP_W, Terrain } from './types';
 
@@ -14,16 +14,22 @@ export const LINK_BRIDGE = 2;
 export const AXIS_NS = 1; // along the grid's north-south axis
 export const AXIS_EW = 2; // along the grid's east-west axis
 
-/** Section 4: roads go on meadow, cleared forest, hill, and marsh; never thicket or water. */
-export function roadAllowedOn(terrain: number, forestCleared: boolean): boolean {
-  if (terrain === Terrain.Meadow || terrain === Terrain.Hill || terrain === Terrain.Marsh) return true;
-  if (terrain === Terrain.Forest) return forestCleared;
+/**
+ * Section 4 (v2.0): roads go on meadow, cleared forest, cleared thicket, drained marsh, and
+ * hill. Never on forest, thicket, marsh, or water. `changed` = the player cleared or drained it.
+ */
+export function roadAllowedOn(terrain: number, changed: boolean): boolean {
+  if (terrain === Terrain.Meadow || terrain === Terrain.Hill) return true;
+  if (terrain === Terrain.Forest || terrain === Terrain.Thicket || terrain === Terrain.Marsh) return changed;
   return false;
 }
 
-/** Section 4: bridges go on water tiles only. */
-export function bridgeAllowedOn(terrain: number): boolean {
-  return terrain === Terrain.Water;
+/**
+ * Section 4 (v2.0, Stu ruling Nov 22, 2026): bridges cross water and marsh. A drained marsh
+ * tile is meadow, so it takes a road, not a bridge.
+ */
+export function bridgeAllowedOn(terrain: number, changed: boolean): boolean {
+  return terrain === Terrain.Water || (terrain === Terrain.Marsh && !changed);
 }
 
 // Section 4: 4-bit neighbour mask. North = 1, East = 2, South = 4, West = 8.
@@ -60,25 +66,32 @@ export function maskShape(mask: number): RoadShape {
 
 export interface MapContext {
   tiles: Uint8Array;
-  forestCleared: Uint8Array;
+  /** 1 where the player cleared (forest, thicket) or drained (marsh) the tile. */
+  cleared: Uint8Array;
   roads: Uint8Array;
   /** True when a building's footprint covers the tile. */
   occupied: (x: number, y: number) => boolean;
 }
 
-export type TileProblem = 'bounds' | 'exists' | 'occupied' | 'thicket' | 'water' | 'forest' | 'notWater';
+/**
+ * Why a road or bridge tile cannot go here. 'exists' = already a road or bridge (a path may run
+ * over it for free). The others are the Section 4 (v2.0) preview reasons.
+ */
+export type TileProblem = 'bounds' | 'exists' | 'occupied' | 'water' | 'marsh' | 'thicket' | 'forest' | 'notBridgeable';
 
-/** Section 4 and 12: why a road cannot go on this tile, or null if it can. */
+/** Section 4: why a road cannot go on this tile, or null if it can. */
 export function roadProblem(ctx: MapContext, x: number, y: number): TileProblem | null {
   if (!inMap(x, y)) return 'bounds';
   const i = y * MAP_W + x;
   if (ctx.roads[i] !== LINK_NONE) return 'exists';
   if (ctx.occupied(x, y)) return 'occupied';
   const t = ctx.tiles[i];
-  if (t === Terrain.Thicket) return 'thicket';
+  const changed = ctx.cleared[i] === 1;
+  if (roadAllowedOn(t, changed)) return null;
   if (t === Terrain.Water) return 'water';
-  if (t === Terrain.Forest && !ctx.forestCleared[i]) return 'forest';
-  return roadAllowedOn(t, ctx.forestCleared[i] === 1) ? null : 'thicket';
+  if (t === Terrain.Marsh) return 'marsh';
+  if (t === Terrain.Thicket) return 'thicket';
+  return 'forest';
 }
 
 /** Section 4: why a bridge cannot go on this tile, or null if it can. */
@@ -87,13 +100,13 @@ export function bridgeProblem(ctx: MapContext, x: number, y: number): TileProble
   const i = y * MAP_W + x;
   if (ctx.roads[i] !== LINK_NONE) return 'exists';
   if (ctx.occupied(x, y)) return 'occupied';
-  return bridgeAllowedOn(ctx.tiles[i]) ? null : 'notWater';
+  return bridgeAllowedOn(ctx.tiles[i], ctx.cleared[i] === 1) ? null : 'notBridgeable';
 }
 
 /**
  * Section 4: "Deck orientation follows the crossing direction at placement."
  * A bridge dragged across the river runs in the drag direction. A single bridge tile follows
- * an existing road or bridge beside it, and otherwise crosses the river the short way.
+ * an existing road or bridge beside it, and otherwise crosses the water or marsh the short way.
  */
 export function bridgeAxisFor(ctx: MapContext, x: number, y: number, dragAxis: number | null): number {
   if (dragAxis === AXIS_NS || dragAxis === AXIS_EW) return dragAxis;
@@ -102,12 +115,16 @@ export function bridgeAxisFor(ctx: MapContext, x: number, y: number, dragAxis: n
   const ew = link(x - 1, y) || link(x + 1, y);
   if (ns && !ew) return AXIS_NS;
   if (ew && !ns) return AXIS_EW;
+  const wet = (xx: number, yy: number) => {
+    const i = yy * MAP_W + xx;
+    return bridgeAllowedOn(ctx.tiles[i], ctx.cleared[i] === 1);
+  };
   const run = (dx: number, dy: number) => {
     let n = 1;
     for (const s of [1, -1]) {
       let xx = x + dx * s;
       let yy = y + dy * s;
-      while (inMap(xx, yy) && ctx.tiles[yy * MAP_W + xx] === Terrain.Water) {
+      while (inMap(xx, yy) && wet(xx, yy)) {
         n++;
         xx += dx * s;
         yy += dy * s;
@@ -141,4 +158,34 @@ export function pathAxis(path: { x: number; y: number }[]): number | null {
   const a = path[0];
   const b = path[path.length - 1];
   return Math.abs(b.y - a.y) > Math.abs(b.x - a.x) ? AXIS_NS : AXIS_EW;
+}
+
+// ---------- Section 4 (v2.0): the preview path ----------
+
+export interface Pt {
+  x: number;
+  y: number;
+}
+
+/**
+ * Section 4 preview drag rules, as a pure step: the drag reached `tile`. Returns the new path.
+ *  - A tile next to the path's end (4-neighbour) joins the path, with no duplicates.
+ *  - Dragging back over the tile before the end removes the end.
+ *  - A jump of more than one tile adds nothing until the pointer reaches a tile next to the end.
+ *  - Off-map tiles never join.
+ * Tiles that cannot take a road or bridge DO join the preview sequence (so they render red and
+ * the cost bar names them, Section 4), but they are never charged or built: Confirm stays
+ * disabled while any is in the path.
+ */
+export function extendPath(path: Pt[], tile: Pt): Pt[] {
+  if (!inMap(tile.x, tile.y)) return path;
+  if (path.length === 0) return [tile];
+  const end = path[path.length - 1];
+  if (end.x === tile.x && end.y === tile.y) return path;
+  const prev = path[path.length - 2];
+  if (prev && prev.x === tile.x && prev.y === tile.y) return path.slice(0, -1);
+  const adjacent = Math.abs(end.x - tile.x) + Math.abs(end.y - tile.y) === 1;
+  if (!adjacent) return path;
+  if (path.some((p) => p.x === tile.x && p.y === tile.y)) return path; // no duplicates
+  return [...path, tile];
 }

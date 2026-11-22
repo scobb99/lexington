@@ -1,21 +1,27 @@
-// Saving to the browser (Build Spec v1.8, Section 11).
+// Saving to the browser (Build Spec v2.0, Section 11).
 //
 // - IndexedDB through the idb-keyval library (Boone ruling: not localStorage, which blocks the
 //   main thread and is too small for a full city).
 // - One autosave slot plus three manual slots (Fork F). The autosave is written 1 second after
-//   the last change (debounced), and straight away when the page is hidden or closed.
+//   the last change (debounced), and straight away when the page is hidden or closed, when the
+//   Saves panel opens, and after a load or import.
 // - Export and Import move the same data as one JSON file.
-// - New Game deletes the autosave after a typed confirmation (the UI asks for it).
+// - New Town deletes only the autosave after a typed confirmation (the UI asks for it).
 // - Every save is checked by parseSave() before it is used. A save that can't be read is
 //   never loaded silently: the player gets a plain message, and an unreadable autosave is
 //   kept aside (never overwritten) so it can still be downloaded.
+// - (v2.0) The game no longer restores the autosave on open: the title screen comes first, and
+//   Continue loads the autosave. The tutorial runs with autosave paused, like ?sandbox.
+// - (v2.0) A separate settings record in the same database, outside every town slot, holds one
+//   flag: whether the player has finished or skipped the tutorial. It is never exported.
 //
 // The game never waits on saving. If the browser blocks IndexedDB (some private windows do),
 // the game keeps working, the Saves panel says so, and Export still works.
 
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import { describeSave, parseSave, parseSaveText, type SaveV1 } from './save';
-import { currentSave, loadSavedGame, say, startNewGame, store, type Topic } from './store';
+import { NAME, NAME_SLUG } from './config';
+import { describeSave, parseSave, parseSaveText, type MigrationNotes, type SaveData } from './save';
+import { currentSave, loadSavedGame, placeShowcase, say, startNewGame, store, type Topic } from './store';
 
 export type SlotId = 'autosave' | 'slot-1' | 'slot-2' | 'slot-3';
 export const MANUAL_SLOTS: SlotId[] = ['slot-1', 'slot-2', 'slot-3'];
@@ -27,17 +33,19 @@ export const SLOT_NAMES: Record<SlotId, string> = {
 };
 /** Where an autosave that couldn't be read is kept, so it is never lost. */
 const UNREADABLE_KEY = 'autosave-unreadable';
+/** (v2.0) The settings record: outside every town slot, never exported. */
+const SETTINGS_KEY = 'settings';
 /** Section 11: autosave is debounced 1 second after any change. */
 export const AUTOSAVE_DELAY_MS = 1000;
-/** If IndexedDB doesn't answer at start-up, start a new town rather than wait forever. */
+/** If IndexedDB doesn't answer at start-up, carry on rather than wait forever. */
 const BOOT_TIMEOUT_MS = 2500;
 
-// ---------- status for the Saves panel ----------
+// ---------- status for the Saves panel and title screen ----------
 
 export interface SaveStatus {
   /** False when the browser blocks IndexedDB. */
   available: boolean;
-  /** Why autosave is off for this visit, or null when it is on. */
+  /** Why autosave is off for this visit (a test switch), or null when it is on. */
   autosavePaused: string | null;
   /** When the autosave was last written in this visit. */
   lastAutosave: Date | null;
@@ -74,6 +82,7 @@ export function subscribeSaveStatus(fn: () => void): () => void {
 
 let db: UseStore | null = null;
 function database(): UseStore {
+  // The database keeps the game's working name, so towns saved before the rename are found.
   if (!db) db = createStore('wordcity', 'saves');
   return db;
 }
@@ -87,13 +96,13 @@ function queued<T>(job: () => Promise<T>): Promise<T> {
 }
 
 function blocked(err: unknown): void {
-  console.warn('[WordCity] Saving is not available in this browser window:', err);
+  console.warn(`[${NAME}] Saving is not available in this browser window:`, err);
   setStatus({ available: false, lastError: 'This browser window does not allow saving (private browsing can block it). Use Export to keep a copy of your town.' });
 }
 
 export type SlotRead =
   | { status: 'empty' }
-  | { status: 'ok'; save: SaveV1 }
+  | { status: 'ok'; save: SaveData; notes: MigrationNotes }
   | { status: 'bad'; reason: string; raw: unknown }
   | { status: 'unavailable' };
 
@@ -107,7 +116,7 @@ export async function readSlot(id: SlotId): Promise<SlotRead> {
   }
   if (raw === undefined) return { status: 'empty' };
   const parsed = parseSave(raw);
-  return parsed.ok ? { status: 'ok', save: parsed.save } : { status: 'bad', reason: parsed.reason, raw };
+  return parsed.ok ? { status: 'ok', save: parsed.save, notes: parsed.notes } : { status: 'bad', reason: parsed.reason, raw };
 }
 
 async function writeKey(key: string, value: unknown): Promise<boolean> {
@@ -166,7 +175,7 @@ export async function listSlots(): Promise<SlotInfo[]> {
   );
 }
 
-// ---------- the four player actions on slots ----------
+// ---------- the player actions on slots ----------
 
 /** Saves the current town into a manual slot. */
 export async function saveToSlot(id: SlotId): Promise<boolean> {
@@ -175,11 +184,12 @@ export async function saveToSlot(id: SlotId): Promise<boolean> {
   return ok;
 }
 
-/** Loads a slot into the game. The loaded town becomes the autosave straight away. */
+/** Loads a slot into the game and enters the town. The loaded town becomes the autosave. */
 export async function loadFromSlot(id: SlotId): Promise<{ ok: boolean; reason?: string }> {
   const r = await readSlot(id);
   if (r.status === 'ok') {
-    loadSavedGame(r.save, `Loaded your town from ${SLOT_NAMES[id]}.`);
+    loadSavedGame(r.save, `Loaded your town from ${SLOT_NAMES[id]}.`, r.notes);
+    startAutosave();
     await flushAutosave();
     return { ok: true };
   }
@@ -189,24 +199,33 @@ export async function loadFromSlot(id: SlotId): Promise<{ ok: boolean; reason?: 
       : r.status === 'bad'
         ? `${SLOT_NAMES[id]} could not be loaded. ${r.reason}`
         : 'Saving is not available in this browser window.';
-  say(`${reason} Your current town is unchanged.`, 'warn');
+  if (store.state.mode !== 'title') say(`${reason} Your current town is unchanged.`, 'warn');
   return { ok: false, reason };
 }
 
-/** Section 11 New Game (after the typed confirmation): deletes the autosave, then starts fresh. */
+/**
+ * Section 11 New Town (after the typed confirmation): deletes only the autosave (Slots 1 to 3
+ * are kept), then starts a fresh town. With a test switch in the address nothing is deleted:
+ * the test town starts and autosave stays off for the visit.
+ */
 export async function newGame(seed?: string): Promise<void> {
   cancelPendingAutosave();
-  await deleteKey('autosave');
-  startNewGame(seed);
+  const test = testSwitchInAddress();
+  if (!test) await deleteKey('autosave');
+  const sandbox = !!test && new URLSearchParams(window.location.search).has('sandbox');
+  const urlSeed = test ? new URLSearchParams(window.location.search).get('seed') : null;
+  startNewGame(seed && seed.trim() ? seed : urlSeed ?? undefined, { sandbox });
+  if (test && new URLSearchParams(window.location.search).has('showcase')) placeShowcase(); // ?showcase: all 11 buildings on the map, for art review
+  startAutosave();
   await flushAutosave();
 }
 
 // ---------- export and import (one JSON file) ----------
 
-/** The file name for an export, e.g. wordcity-town-2026-11-20.json */
+/** The file name for an export, e.g. lexington-town-2026-11-22.json */
 export function exportFileName(now: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `wordcity-town-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
+  return `${NAME_SLUG}-town-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
 }
 
 function download(name: string, text: string): void {
@@ -227,18 +246,26 @@ export function exportTown(): void {
   say('Exported your town as a file. Keep it somewhere safe; Import loads it back.', 'success');
 }
 
+/** Section 16: from the title screen, Export downloads a slot's town as it is stored. */
+export async function exportSlot(id: SlotId): Promise<boolean> {
+  const r = await readSlot(id);
+  if (r.status !== 'ok') return false;
+  download(exportFileName(), JSON.stringify(r.save, null, 1));
+  return true;
+}
+
 /** Downloads the autosave that couldn't be loaded, exactly as it was stored. */
 export async function exportUnreadable(): Promise<void> {
   try {
     const raw = await get(UNREADABLE_KEY, database());
-    if (raw !== undefined) download('wordcity-unreadable-autosave.json', JSON.stringify(raw, null, 1));
+    if (raw !== undefined) download(`${NAME_SLUG}-unreadable-autosave.json`, JSON.stringify(raw, null, 1));
   } catch (err) {
     blocked(err);
   }
 }
 
 /** Import, step 1: reads and checks a file. Nothing changes until importChecked(). */
-export async function checkImportFile(file: File): Promise<{ ok: true; save: SaveV1 } | { ok: false; reason: string }> {
+export async function checkImportFile(file: File): Promise<{ ok: true; save: SaveData; notes: MigrationNotes } | { ok: false; reason: string }> {
   let text: string;
   try {
     text = await file.text();
@@ -248,9 +275,10 @@ export async function checkImportFile(file: File): Promise<{ ok: true; save: Sav
   return parseSaveText(text);
 }
 
-/** Import, step 2: loads the checked save and makes it the autosave. */
-export async function importChecked(save: SaveV1, fileName: string): Promise<void> {
-  loadSavedGame(save, `Imported your town from ${fileName}.`);
+/** Import, step 2: loads the checked save, enters the town, and makes it the autosave. */
+export async function importChecked(save: SaveData, fileName: string, notes?: MigrationNotes): Promise<void> {
+  loadSavedGame(save, `Imported your town from ${fileName}.`, notes);
+  startAutosave();
   await flushAutosave();
 }
 
@@ -258,16 +286,23 @@ export async function importChecked(save: SaveV1, fileName: string): Promise<voi
 
 let autosaveTimer: number | null = null;
 let autosaveStarted = false;
+/** (v2.0) Section 17: autosave is paused for the whole tutorial. */
+let tutorialPaused = false;
 
 function cancelPendingAutosave(): void {
   if (autosaveTimer !== null) window.clearTimeout(autosaveTimer);
   autosaveTimer = null;
 }
 
+/** Only a real town is ever autosaved: never the title placeholder, never the tutorial. */
+function autosaveAllowed(): boolean {
+  return !status.autosavePaused && !tutorialPaused && store.state.mode === 'town';
+}
+
 /** Writes the autosave now (used after loads, imports and when the page is hidden). */
 export async function flushAutosave(): Promise<boolean> {
   cancelPendingAutosave();
-  if (status.autosavePaused) return false;
+  if (!autosaveAllowed()) return false;
   const ok = await writeKey('autosave', currentSave());
   if (ok) setStatus({ lastAutosave: new Date() });
   return ok;
@@ -279,7 +314,7 @@ export function flushPendingAutosave(): Promise<boolean> {
 }
 
 function scheduleAutosave(): void {
-  if (status.autosavePaused) return;
+  if (!autosaveAllowed()) return;
   cancelPendingAutosave();
   autosaveTimer = window.setTimeout(() => {
     autosaveTimer = null;
@@ -287,10 +322,19 @@ function scheduleAutosave(): void {
   }, AUTOSAVE_DELAY_MS);
 }
 
-/** Things that change the town. Tool choice and messages alone are not saved. */
+/** (v2.0) Section 17: the tutorial pauses autosave; nothing in the tutorial is ever saved. */
+export function setTutorialPause(on: boolean): void {
+  tutorialPaused = on;
+  if (on) cancelPendingAutosave();
+}
+
+/**
+ * Things that change the town. Tool choice, the current word, previews and messages are not
+ * saved (v2.0: Hint, Swap, previews and the ghost are never saved).
+ */
 const SAVED_TOPICS: Topic[] = ['terrain', 'tiles', 'roads', 'buildings', 'resources', 'rack', 'camera', 'load'];
 
-/** Starts the Section 11 autosave. Call once, after the starting town is in place. */
+/** Starts the Section 11 autosave. Safe to call many times; it starts once. */
 export function startAutosave(): void {
   if (autosaveStarted) return;
   autosaveStarted = true;
@@ -304,7 +348,7 @@ export function startAutosave(): void {
   });
 }
 
-// ---------- start-up ----------
+// ---------- start-up: the title screen's view of the saves ----------
 
 /**
  * Test switches build a test town on purpose (?seed picks a map, ?sandbox and ?showcase add
@@ -321,40 +365,55 @@ export function testSwitchInAddress(): string | null {
   return null;
 }
 
-export type BootOutcome = 'restored' | 'new' | 'unreadable' | 'paused' | 'unavailable';
+/** What the title screen needs to know about the autosave (Section 16). */
+export interface BootInfo {
+  /** 'ok' = a loadable autosave exists (Continue shows). */
+  autosave: 'ok' | 'empty' | 'unreadable' | 'unavailable' | 'paused';
+  /** True when the player has never finished or skipped the tutorial. */
+  firstVisit: boolean;
+}
+
+let bootSave: { save: SaveData; notes: MigrationNotes } | null = null;
 
 /**
- * Section 11 start-up: if there is an autosave, the town continues where it was left. Runs
- * before the map is created, so the map paints the restored town first time (no flash, no
- * second bake). Never waits more than 2.5 seconds on the browser's storage.
+ * Section 16 start-up: reads the autosave (never more than 2.5 seconds) so the title screen
+ * knows whether to show Continue. Nothing is loaded. An autosave that can't be read is kept
+ * aside under its own key (never overwritten), and the title screen says so.
  */
-export async function bootFromAutosave(): Promise<BootOutcome> {
+export async function readBootInfo(): Promise<BootInfo> {
+  const firstVisit = !(await tutorialDone());
   const sw = testSwitchInAddress();
   if (sw) {
     setStatus({ autosavePaused: `Autosave is off for this visit because the address has the test switch ?${sw}. Your saved town is untouched; Save to a slot or Export works as usual.` });
-    return 'paused';
+    return { autosave: 'paused', firstVisit };
   }
   const timeout = new Promise<'timeout'>((resolve) => window.setTimeout(() => resolve('timeout'), BOOT_TIMEOUT_MS));
   const r = await Promise.race([readSlot('autosave'), timeout]);
   if (r === 'timeout') {
     blocked(new Error('IndexedDB did not answer in time'));
-    return 'unavailable';
+    return { autosave: 'unavailable', firstVisit };
   }
-  if (r.status === 'unavailable') return 'unavailable';
-  if (r.status === 'empty') return 'new';
+  if (r.status === 'unavailable') return { autosave: 'unavailable', firstVisit };
+  if (r.status === 'empty') return { autosave: 'empty', firstVisit };
   if (r.status === 'ok') {
-    const when = r.save.savedAt ? new Date(r.save.savedAt) : null;
-    loadSavedGame(r.save, `Welcome back! Your town is just as you left it${when ? ` (saved ${formatWhen(when)})` : ''}.`);
-    return 'restored';
+    bootSave = { save: r.save, notes: r.notes };
+    return { autosave: 'ok', firstVisit };
   }
-  // The autosave is there but can't be loaded: keep it aside (never overwrite it), start fresh.
   const kept = await writeKey(UNREADABLE_KEY, r.raw);
   setStatus({ unreadableKept: kept });
-  say(
-    `Your autosave could not be loaded. ${r.reason} ${kept ? 'It has been kept aside (Saves panel, "Download it"), and' : 'A'} new town was started.`,
-    'warn',
-  );
-  return 'unreadable';
+  return { autosave: 'unreadable', firstVisit };
+}
+
+/** Section 16 Continue: loads the autosave and enters the town with the Welcome back message. */
+export async function continueTown(): Promise<boolean> {
+  const r = await readSlot('autosave');
+  const got = r.status === 'ok' ? { save: r.save, notes: r.notes } : bootSave;
+  if (!got) return false;
+  loadSavedGame(got.save, 'Welcome back! Your town is just as you left it.', got.notes);
+  startAutosave();
+  // A migrated save is written back in the new format straight away.
+  if (got.notes.marshRoadsToBridges > 0) await flushAutosave();
+  return true;
 }
 
 /** Checks whether an unreadable autosave was kept by an earlier visit. */
@@ -365,6 +424,33 @@ export async function checkUnreadableKept(): Promise<void> {
   } catch {
     /* status already says saving is unavailable */
   }
+}
+
+/** Is there a loadable autosave right now (for the New Town confirmation)? */
+export async function hasAutosave(): Promise<boolean> {
+  const r = await readSlot('autosave');
+  return r.status === 'ok' || r.status === 'bad';
+}
+
+// ---------- (v2.0) the settings record: the tutorial flag ----------
+
+let tutorialFlagCache: boolean | null = null;
+
+export async function tutorialDone(): Promise<boolean> {
+  if (tutorialFlagCache !== null) return tutorialFlagCache;
+  try {
+    const raw = (await get(SETTINGS_KEY, database())) as { tutorialDone?: unknown } | undefined;
+    tutorialFlagCache = raw?.tutorialDone === true;
+  } catch {
+    tutorialFlagCache = false;
+  }
+  return tutorialFlagCache;
+}
+
+/** Finishing or skipping the tutorial sets the flag (Section 11). */
+export async function markTutorialDone(): Promise<void> {
+  tutorialFlagCache = true;
+  await writeKey(SETTINGS_KEY, { tutorialDone: true });
 }
 
 export function formatWhen(d: Date): string {

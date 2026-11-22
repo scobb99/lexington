@@ -1,17 +1,24 @@
-// Save format (Build Spec v1.8, Section 11). Pure rules: no IndexedDB, no React, no Pixi.
+// Save format (Build Spec v2.0, Section 11). Pure rules: no IndexedDB, no React, no Pixi.
 //
 // A save holds exactly the Section 11 fields: format version, map seed, every tile change
 // from the generated base map, buildings (type and position), the five resource balances, rack
 // letters, rerolls held, tier, lifetime totals, the last 10 submitted words, quest completion
 // state, and camera position and zoom. Happiness and population are NOT saved: they are
-// recalculated from the buildings on load (Section 8).
+// recalculated from the buildings on load (Section 8). Hint state, swap selections, road and
+// bridge previews and the placement ghost are never saved (v2.0).
+//
+// Version 2 (v2.0): tile changes gain cleared thicket and drained marsh, and roads can no longer
+// stand on marsh. A version 1 save loads through MIGRATIONS[1], which turns every road tile on
+// marsh into a bridge tile at no charge and changes nothing else (Section 11).
 //
 // Loading never trusts a file blindly. parseSave() checks every field and rebuilds the map
 // from the seed before anything is applied, so a damaged or hand-edited save fails with a
 // plain message instead of loading silently into a broken map (Section 11).
 
 import { BUILDINGS, placementProblem, population } from './buildings';
+import { NAME } from './config';
 import { QUESTS } from './progress';
+import { bridgeAllowedOn, bridgeAxisFor, roadAllowedOn } from './roads';
 import { generateTerrain } from './terrain';
 import {
   MAP_H,
@@ -26,10 +33,13 @@ import {
   type Tier,
 } from './types';
 
-/** Identifies a WordCity save file (so a random JSON file is refused with a clear message). */
+/**
+ * Identifies a save file (so a random JSON file is refused with a clear message). The value
+ * keeps the game's working name so every save made before the rename still loads.
+ */
 export const SAVE_FORMAT = 'wordcity-save';
-/** Section 11: the save format version number. Raise it whenever the format changes. */
-export const SAVE_VERSION = 1;
+/** Section 11: the save format version number. v2.0 raises it to 2 (marsh bridge ruling). */
+export const SAVE_VERSION = 2;
 
 /** Camera saved as the world point at the centre of the view, so it fits any screen size. */
 export interface SavedCamera {
@@ -38,17 +48,21 @@ export interface SavedCamera {
   zoom: number;
 }
 
-export interface SaveV1 {
+export interface SaveData {
   format: typeof SAVE_FORMAT;
-  version: 1;
+  version: 2;
   /** When the save was made (ISO 8601). Shown in the slot list only. */
   savedAt: string;
   /** Section 2: the seed regenerates the base map exactly. `value` double-checks it. */
   seed: { text: string; value: number };
   /** Section 11: every tile change from the generated base map, as tile indices (y * 54 + x). */
   tiles: {
-    /** Forest tiles the player cleared (Section 4). */
+    /** Forest tiles the player cleared (Section 4): now cleared forest. */
     cleared: number[];
+    /** (v2.0) Thicket tiles the player cleared: now cleared thicket. */
+    clearedThicket: number[];
+    /** (v2.0) Marsh tiles the player drained: now meadow, permanently. */
+    drained: number[];
     /** Road tiles. */
     roads: number[];
     /** Bridge tiles with their deck direction: 1 = north-south, 2 = east-west. */
@@ -73,12 +87,11 @@ export interface SaveV1 {
   camera: SavedCamera;
 }
 
-export type SaveData = SaveV1;
-
 /** The parts of the game a save describes (a subset of GameState). */
 export interface SaveSource {
   terrain: TerrainMap;
-  forestCleared: Uint8Array;
+  /** 1 where the player cleared (forest, thicket) or drained (marsh) the tile. */
+  cleared: Uint8Array;
   roads: Uint8Array;
   bridgeAxis: Uint8Array;
   flowers: { x: number; y: number }[];
@@ -94,12 +107,19 @@ export interface SaveSource {
 }
 
 /** Builds a save from the current game. Art-showcase buildings are never saved. */
-export function makeSave(s: SaveSource, camera: SavedCamera, now: Date = new Date()): SaveV1 {
+export function makeSave(s: SaveSource, camera: SavedCamera, now: Date = new Date()): SaveData {
   const cleared: number[] = [];
+  const clearedThicket: number[] = [];
+  const drained: number[] = [];
   const roads: number[] = [];
   const bridges: [number, 1 | 2][] = [];
   for (let i = 0; i < MAP_W * MAP_H; i++) {
-    if (s.forestCleared[i] === 1) cleared.push(i);
+    if (s.cleared[i] === 1) {
+      const base = s.terrain.tiles[i];
+      if (base === Terrain.Forest) cleared.push(i);
+      else if (base === Terrain.Thicket) clearedThicket.push(i);
+      else if (base === Terrain.Marsh) drained.push(i);
+    }
     if (s.roads[i] === 1) roads.push(i);
     else if (s.roads[i] === 2) bridges.push([i, s.bridgeAxis[i] === 2 ? 2 : 1]);
   }
@@ -108,7 +128,7 @@ export function makeSave(s: SaveSource, camera: SavedCamera, now: Date = new Dat
     version: SAVE_VERSION,
     savedAt: now.toISOString(),
     seed: { text: s.terrain.seedText, value: s.terrain.seed },
-    tiles: { cleared, roads, bridges, flowers: s.flowers.map((f) => [f.x, f.y]) },
+    tiles: { cleared, clearedThicket, drained, roads, bridges, flowers: s.flowers.map((f) => [f.x, f.y]) },
     buildings: s.buildings.filter((b) => !b.preview).map((b) => ({ type: b.type, x: b.x, y: b.y })),
     resources: { ...s.resources },
     rack: [...s.rack],
@@ -141,17 +161,60 @@ export interface RestoredGame extends SaveSource {
   camera: SavedCamera;
 }
 
-export type ParseResult = { ok: true; save: SaveV1 } | { ok: false; reason: string };
+/** What a migration changed, for the Section 11 message after the load. */
+export interface MigrationNotes {
+  /** v1 to v2: road tiles standing on marsh that became bridge tiles. */
+  marshRoadsToBridges: number;
+}
+
+export type ParseResult = { ok: true; save: SaveData; notes: MigrationNotes } | { ok: false; reason: string };
 
 /** One step that turns a save of version N into version N + 1. */
 export type Migration = (old: Record<string, unknown>) => Record<string, unknown>;
 
+/** Where a migration leaves its count for the message (removed before the save is used). */
+const NOTE_KEY = '__marshRoadsToBridges';
+
 /**
- * Section 11 migrations, keyed by the version they upgrade FROM. Version 1 is the first
- * format, so there are none yet. When the format changes, add the step here and raise
- * SAVE_VERSION: old saves then load through it instead of failing.
+ * Section 11 (v2.0) migration from version 1 to version 2: every field is kept, the two new
+ * tile-change lists start empty, and every road tile standing on a marsh tile becomes a bridge
+ * tile, at no charge, because roads can no longer stand on marsh. Nothing else changes (no
+ * balance, no building, no lifetime counter). The deck direction follows the neighbouring road
+ * or the short way across the marsh (Section 4).
  */
-export const MIGRATIONS: Record<number, Migration> = {};
+export function migrateV1toV2(old: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...old, version: 2 };
+  const tiles = isObj(old.tiles) ? { ...(old.tiles as Record<string, unknown>) } : null;
+  const seed = isObj(old.seed) ? (old.seed as Record<string, unknown>) : null;
+  if (!tiles || !seed || typeof seed.text !== 'string') return out; // the version 2 check will say why
+  tiles.clearedThicket = Array.isArray(tiles.clearedThicket) ? tiles.clearedThicket : [];
+  tiles.drained = Array.isArray(tiles.drained) ? tiles.drained : [];
+  const map = generateTerrain(seed.text);
+  const roads = Array.isArray(tiles.roads) ? (tiles.roads as unknown[]) : [];
+  const onMarsh = roads.filter((i): i is number => isInt(i, 0, TILE_COUNT - 1) && map.tiles[i] === Terrain.Marsh);
+  if (onMarsh.length > 0) {
+    const keep = roads.filter((i) => !(isInt(i, 0, TILE_COUNT - 1) && map.tiles[i] === Terrain.Marsh));
+    const bridges = Array.isArray(tiles.bridges) ? [...(tiles.bridges as unknown[])] : [];
+    // Deck direction is worked out against the whole network (roads and bridges as saved).
+    const grid = new Uint8Array(TILE_COUNT);
+    for (const i of roads) if (isInt(i, 0, TILE_COUNT - 1)) grid[i] = 1;
+    for (const b of bridges) if (Array.isArray(b) && isInt(b[0], 0, TILE_COUNT - 1)) grid[b[0]] = 2;
+    const cleared = new Uint8Array(TILE_COUNT);
+    const ctx = { tiles: map.tiles, cleared, roads: grid, occupied: () => false };
+    for (const i of onMarsh) bridges.push([i, bridgeAxisFor(ctx, i % MAP_W, Math.floor(i / MAP_W), null) as 1 | 2]);
+    tiles.roads = keep;
+    tiles.bridges = bridges;
+  }
+  out.tiles = tiles;
+  out[NOTE_KEY] = onMarsh.length;
+  return out;
+}
+
+/**
+ * Section 11 migrations, keyed by the version they upgrade FROM. When the format changes, add
+ * the step here and raise SAVE_VERSION: old saves then load through it instead of failing.
+ */
+export const MIGRATIONS: Record<number, Migration> = { 1: migrateV1toV2 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isInt = (v: unknown, min: number, max: number): v is number =>
@@ -174,7 +237,7 @@ export function parseSaveText(text: string, migrations: Record<number, Migration
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, reason: "This file isn't a WordCity save: it could not be read as a save file." };
+    return { ok: false, reason: `This file isn't a ${NAME} save: it could not be read as a save file.` };
   }
   return parseSave(raw, migrations);
 }
@@ -185,21 +248,22 @@ export function parseSaveText(text: string, migrations: Record<number, Migration
  */
 export function parseSave(raw: unknown, migrations: Record<number, Migration> = MIGRATIONS): ParseResult {
   try {
-    if (!isObj(raw) || raw.format !== SAVE_FORMAT) fail("This file isn't a WordCity save.");
+    if (!isObj(raw) || raw.format !== SAVE_FORMAT) fail(`This file isn't a ${NAME} save.`);
     let data = raw as Record<string, unknown>;
     if (!isInt(data.version, 0, Number.MAX_SAFE_INTEGER)) fail('This save has no format version, so it cannot be loaded safely.');
     let version = data.version as number;
     if (version > SAVE_VERSION) {
-      fail(`This save was made by a newer version of WordCity (save format ${version}; this game reads up to ${SAVE_VERSION}). Update the game, then try again.`);
+      fail(`This save was made by a newer version of ${NAME} (save format ${version}; this game reads up to ${SAVE_VERSION}). Update the game, then try again.`);
     }
     while (version < SAVE_VERSION) {
       const step = migrations[version];
-      if (!step) fail(`This save is from an older version of WordCity (save format ${version}) that this game can no longer load.`);
+      if (!step) fail(`This save is from an older version of ${NAME} (save format ${version}) that this game can no longer load.`);
       data = step(data);
       if (!isObj(data) || data.version !== version + 1) fail(`Upgrading this save from format ${version} did not work, so it was not loaded.`);
       version += 1;
     }
-    return { ok: true, save: checkV1(data) };
+    const marshRoadsToBridges = typeof data[NOTE_KEY] === 'number' ? (data[NOTE_KEY] as number) : 0;
+    return { ok: true, save: checkV2(data), notes: { marshRoadsToBridges } };
   } catch (err) {
     if (err instanceof SaveError) return { ok: false, reason: err.message };
     return { ok: false, reason: 'This save could not be read, so it was not loaded.' };
@@ -229,7 +293,7 @@ function checkIndexList(v: unknown, what: string): number[] {
 }
 
 /** Every Section 11 field, checked against the map the seed makes. */
-function checkV1(d: Record<string, unknown>): SaveV1 {
+function checkV2(d: Record<string, unknown>): SaveData {
   // Seed: the base map must regenerate exactly.
   const seed = d.seed;
   if (!isObj(seed) || typeof seed.text !== 'string' || seed.text.length === 0 || seed.text.length > 200 || !isInt(seed.value, 0, 0xffffffff)) {
@@ -245,12 +309,24 @@ function checkV1(d: Record<string, unknown>): SaveV1 {
   const t = d.tiles as Record<string, unknown>;
   const cleared = checkIndexList(t.cleared, 'cleared forest');
   for (const i of cleared) if (tilesAt[i] !== Terrain.Forest) fail('This save is damaged: it clears forest where this map has none.');
-  const clearedSet = new Set(cleared);
+  const clearedThicket = checkIndexList(t.clearedThicket, 'cleared thicket');
+  for (const i of clearedThicket) if (tilesAt[i] !== Terrain.Thicket) fail('This save is damaged: it clears thicket where this map has none.');
+  const drained = checkIndexList(t.drained, 'drained marsh');
+  for (const i of drained) if (tilesAt[i] !== Terrain.Marsh) fail('This save is damaged: it drains marsh where this map has none.');
+  const changed = new Uint8Array(TILE_COUNT);
+  for (const i of [...cleared, ...clearedThicket, ...drained]) changed[i] = 1;
   const roads = checkIndexList(t.roads, 'road');
   for (const i of roads) {
-    const ter = tilesAt[i];
-    if (ter === Terrain.Water || ter === Terrain.Thicket) fail('This save is damaged: it has a road on water or thicket.');
-    if (ter === Terrain.Forest && !clearedSet.has(i)) fail('This save is damaged: it has a road on uncleared forest.');
+    if (!roadAllowedOn(tilesAt[i], changed[i] === 1)) {
+      const ter = tilesAt[i];
+      fail(
+        ter === Terrain.Marsh
+          ? 'This save is damaged: it has a road on marsh, which needs a bridge.'
+          : ter === Terrain.Water || ter === Terrain.Thicket
+            ? 'This save is damaged: it has a road on water or thicket.'
+            : 'This save is damaged: it has a road on uncleared forest.',
+      );
+    }
   }
   if (!Array.isArray(t.bridges)) fail('This save is damaged: the bridge list is missing.');
   const roadSet = new Set(roads);
@@ -261,7 +337,7 @@ function checkV1(d: Record<string, unknown>): SaveV1 {
       fail('This save is damaged: a bridge entry is not readable.');
     }
     const [i, axis] = b as [number, 1 | 2];
-    if (tilesAt[i] !== Terrain.Water) fail('This save is damaged: it has a bridge on dry land.');
+    if (!bridgeAllowedOn(tilesAt[i], changed[i] === 1)) fail('This save is damaged: it has a bridge on dry land.');
     if (roadSet.has(i) || bridgeSeen.has(i)) fail('This save is damaged: a bridge tile is listed twice.');
     bridgeSeen.add(i);
     bridges.push([i, axis]);
@@ -278,15 +354,14 @@ function checkV1(d: Record<string, unknown>): SaveV1 {
 
   // Buildings: rebuilt one by one on the restored map, so nothing overlaps, sits on a road,
   // water or thicket, or hangs off the map. (Road access and the Sawmill's forest edge are
-  // not re-checked: removing a road or clearing nearby forest after building is allowed.)
+  // not re-checked: removing a road or clearing nearby forest after building is allowed. A
+  // version 1 Sawmill, Quarry or Pier standing on marsh, which v1 allowed, still loads.)
   if (!Array.isArray(d.buildings)) fail('This save is damaged: the building list is missing.');
-  const forestCleared = new Uint8Array(TILE_COUNT);
-  for (const i of cleared) forestCleared[i] = 1;
   const roadGrid = new Uint8Array(TILE_COUNT);
   for (const i of roads) roadGrid[i] = 1;
   for (const [i] of bridges) roadGrid[i] = 2;
   const placed: Building[] = [];
-  const buildings: SaveV1['buildings'] = [];
+  const buildings: SaveData['buildings'] = [];
   for (const b of d.buildings as unknown[]) {
     if (!isObj(b) || typeof b.type !== 'string' || !BUILDING_TYPES.includes(b.type as BuildingType) || !isInt(b.x, 0, MAP_W - 1) || !isInt(b.y, 0, MAP_H - 1)) {
       fail('This save is damaged: a building entry is not readable.');
@@ -294,7 +369,7 @@ function checkV1(d: Record<string, unknown>): SaveV1 {
     const type = (b as { type: BuildingType }).type;
     const { x, y } = b as { x: number; y: number };
     const problem = placementProblem(
-      { tiles: tilesAt, forestCleared, roads: roadGrid, buildings: placed, mapW: MAP_W, mapH: MAP_H },
+      { tiles: tilesAt, cleared: changed, roads: roadGrid, buildings: placed, mapW: MAP_W, mapH: MAP_H },
       type,
       x,
       y,
@@ -350,10 +425,10 @@ function checkV1(d: Record<string, unknown>): SaveV1 {
 
   return {
     format: SAVE_FORMAT,
-    version: 1,
+    version: 2,
     savedAt: typeof d.savedAt === 'string' ? d.savedAt : '',
     seed: { text: seedObj.text, value: seedObj.value },
-    tiles: { cleared, roads, bridges, flowers },
+    tiles: { cleared, clearedThicket, drained, roads, bridges, flowers },
     buildings,
     resources,
     rack: [...(d.rack as string[])],
@@ -375,12 +450,12 @@ function checkV1(d: Record<string, unknown>): SaveV1 {
 }
 
 /** Turns a checked save back into game state. Only call with a save from parseSave(). */
-export function restoreGame(save: SaveV1): RestoredGame {
+export function restoreGame(save: SaveData): RestoredGame {
   const terrain = generateTerrain(save.seed.text);
-  const forestCleared = new Uint8Array(TILE_COUNT);
+  const cleared = new Uint8Array(TILE_COUNT);
   const roads = new Uint8Array(TILE_COUNT);
   const bridgeAxis = new Uint8Array(TILE_COUNT);
-  for (const i of save.tiles.cleared) forestCleared[i] = 1;
+  for (const i of [...save.tiles.cleared, ...save.tiles.clearedThicket, ...save.tiles.drained]) cleared[i] = 1;
   for (const i of save.tiles.roads) roads[i] = 1;
   for (const [i, axis] of save.tiles.bridges) {
     roads[i] = 2;
@@ -389,7 +464,7 @@ export function restoreGame(save: SaveV1): RestoredGame {
   const buildings: Building[] = save.buildings.map((b, k) => ({ id: k + 1, type: b.type, x: b.x, y: b.y }));
   return {
     terrain,
-    forestCleared,
+    cleared,
     roads,
     bridgeAxis,
     flowers: save.tiles.flowers.map(([x, y]) => ({ x, y })),
@@ -408,7 +483,7 @@ export function restoreGame(save: SaveV1): RestoredGame {
 }
 
 /** A one-line description of a save for the slot list. Population is recalculated, never stored. */
-export function describeSave(save: SaveV1): { tier: Tier; population: number; words: number; buildings: number; savedAt: string } {
+export function describeSave(save: SaveData): { tier: Tier; population: number; words: number; buildings: number; savedAt: string } {
   const buildings = save.buildings.map((b, k) => ({ id: k + 1, ...b }));
   return {
     tier: save.tier,
