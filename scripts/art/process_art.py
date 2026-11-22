@@ -1,4 +1,4 @@
-"""WordCity art pipeline (Build Spec v1.2, Sections 3 and 10).
+"""Lexington art pipeline (Build Spec v2.0, Sections 3, 10 and 13).
 
 Turns the approved Gemini JPGs (white background) into game-ready PNGs with transparency.
 
@@ -21,6 +21,13 @@ Tiling the slabs directly would show a grid of soil edges, which Section 3 forbi
   * terrain-<type>-<n>.png: the keyed full tile, kept as the record of the approved art.
   * terrain.json: per-variant anchors and sizes, plus per-type colours (ground, bank, soil).
   The game's variant manifest (src/pixi/terrainVariants.ts) decides where each variant goes.
+
+Terrain polish pieces (Section 13, v2.0), when Gemini delivers them, named polish-<id>.jpg:
+  polish-hill-peak.jpg, polish-forest-canopy-1.jpg, polish-forest-canopy-2.jpg,
+  polish-tree-large-1.jpg -> props-<id>.png (keyed, trimmed, 4 px per game pixel)
+  polish-edge-marsh-1.jpg, polish-edge-water-1.jpg -> splat-<id>.png (keyed, soft edge)
+  Their slots already exist in POLISH_ART (src/pixi/terrainVariants.ts), so the game uses them
+  on the next build with no code changes.
 """
 import json
 import os
@@ -337,4 +344,22 @@ for biome, n, stem in jobs:
 
 with open(os.path.join(TERRAIN_OUT, 'terrain.json'), 'w') as f:
     json.dump(terrain_meta, f, indent=2)
+
+# ---------------------------------------------------------------- Section 13 polish pieces
+# Width in game tiles for each piece (matches POLISH_ART "tiles" in terrainVariants.ts).
+POLISH_TILES = {'hill-peak': 2.6, 'forest-canopy-1': 1.9, 'forest-canopy-2': 1.9, 'tree-large-1': 1.2,
+                'edge-marsh-1': 1.6, 'edge-water-1': 1.6}
+for f in sorted(os.listdir(SRC)):
+    m = re.fullmatch(r'polish-([a-z0-9-]+)\.jpg', f)
+    if not m:
+        continue
+    pid = m.group(1)
+    rgba, _ = key_white(load(f[:-4]))
+    vy, vx = np.nonzero(rgba[..., 3] > 3)
+    img = to_image(rgba[vy.min():vy.max() + 1, vx.min():vx.max() + 1])
+    out_w = round(TILE_W * POLISH_TILES.get(pid, 1.5) * TEXTURE_DENSITY)
+    img = resize_rgba(img, (out_w, round(out_w * img.height / img.width)))
+    name = ('splat-' if pid.startswith('edge-') else 'props-') + pid + '.png'
+    img.save(os.path.join(TERRAIN_OUT, name), optimize=True)
+    print(f'polish {pid:16s} -> {name}')
 print('done')
