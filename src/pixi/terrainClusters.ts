@@ -121,3 +121,130 @@ export function peakTiles(c: Clusters): { x: number; y: number; size: number }[]
   }
   return out;
 }
+
+/** Main peak width in tiles for a patch: 2.6 at 4 tiles, growing to 4.6 for big patches. */
+export function peakWidth(size: number): number {
+  return Math.min(4.6, Math.max(2.6, 1.9 + Math.sqrt(size) * 0.36));
+}
+
+/** Patches this big are too large for one peak to read as one feature. */
+export const RANGE_MIN_TILES = 40;
+/** Extra peaks in a big patch stand at least this far (tiles) from every other peak. */
+export const RANGE_SPACING = 7;
+
+export interface PeakSite {
+  x: number;
+  y: number;
+  size: number;
+  /** Width of the peak's base in tiles. */
+  tiles: number;
+  main: boolean;
+}
+
+/**
+ * The peak art's outline, for keeping it on its own hill. `aspect` is the art's height over its
+ * base width (from terrain.json "polish"), `anchorY` the base point as a fraction of the height.
+ */
+export interface PeakShape {
+  aspect: number;
+  anchorY: number;
+}
+/** Measured from the approved Gemini terrain-peak.jpg (768 x 577, base point at 63 percent). */
+export const PEAK_SHAPE: PeakShape = { aspect: 577 / 768, anchorY: 0.632 };
+/** Narrowest peak for a patch that has room for one, in tiles. */
+export const PEAK_MIN_WIDTH = 2.6;
+/** Small or thin patches may go down to this so the peak stays on its own hill. */
+export const PEAK_SMALL_WIDTH = 2.0;
+
+/**
+ * How many tiles outside the hill patch the peak art would cover behind or beside its base, for
+ * a peak of `tiles` width standing on (px, py). Those tiles can hold roads and buildings, and
+ * anything built there draws over the baked peak (a building behind a mountain would sit on its
+ * slope), so a peak is placed where this is 0 whenever the patch allows it. The outline is
+ * treated as a triangle from the base corners to the summit; a tile counts when its diamond
+ * reaches into it (a tile the base corners only graze does not). Tiles in `keepClear` (the
+ * tutorial's marked plots) count even inside the patch.
+ */
+export function peakOverhang(c: Clusters, id: number, px: number, py: number, tiles: number, shape: PeakShape = PEAK_SHAPE, keepClear?: ReadonlySet<number>): number {
+  // Summit height and base half-width in screen pixels; a tile counts when its diamond (32 x 20
+  // around its centre) reaches into the outline, so the base is trimmed and the summit raised.
+  const half = 32 * tiles * 0.8 + 12;
+  const up = 64 * tiles * shape.aspect * shape.anchorY + 26;
+  const r = Math.ceil(tiles * 1.6) + 2;
+  let bad = 0;
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) {
+      const x = px + dx;
+      const y = py + dy;
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+      const sx = (dx - dy) * 32;
+      const sy = (dx + dy) * 20;
+      if (sy > 0 || sy < -up) continue;
+      if (Math.abs(sx) > half * (1 + sy / up)) continue;
+      if (c.patch[y * MAP_W + x] !== id || keepClear?.has(y * MAP_W + x)) bad++;
+    }
+  return bad;
+}
+
+/**
+ * Section 13: every hill patch of 4 or more tiles gets a mountain peak at its centre. Two build
+ * interpretations (both flagged in the build report):
+ *  - the peak stands on the centre tile when its art fits inside the patch there; otherwise on
+ *    the nearest patch tile where it fits, narrowing toward 2.6 tiles (2.0 for a small or thin
+ *    patch) if it must. It only moves off the centre so the art does not cover open ground
+ *    behind it (where a road or building would draw over the mountain). A patch too small or
+ *    thin to hold it anywhere keeps the tile with the least overhang.
+ *  - a patch of 40 or more tiles also gets smaller peaks on its deep interior (depth 3 or more,
+ *    at least 7 tiles from every other peak, about one per 45 tiles, at most 4 extra), each
+ *    only where it fits, so a very large hill region reads as a range rather than one small
+ *    peak lost in a field of mounds.
+ */
+export function peakSites(c: Clusters, shape: PeakShape = PEAK_SHAPE, keepClear?: ReadonlySet<number>): PeakSite[] {
+  const out: PeakSite[] = [];
+  for (let id = 0; id < c.size.length; id++) {
+    if (c.type[id] !== Terrain.Hill || c.size[id] < PEAK_MIN_TILES) continue;
+    const size = c.size[id];
+    const centre = c.centre[id];
+    const tilesOf: { x: number; y: number; d: number }[] = [];
+    for (let i = 0; i < c.patch.length; i++) if (c.patch[i] === id) tilesOf.push({ x: i % MAP_W, y: (i / MAP_W) | 0, d: c.depth[i] });
+    const near = (p: { x: number; y: number }) => Math.hypot(p.x - centre.x, p.y - centre.y);
+    tilesOf.sort((a, b) => near(a) - near(b) || b.d - a.d || a.y - b.y || a.x - b.x);
+
+    let main: PeakSite | null = null;
+    const widest = peakWidth(size);
+    const widths: number[] = [];
+    for (let w = widest; w > PEAK_MIN_WIDTH; w -= 0.3) widths.push(w);
+    widths.push(PEAK_MIN_WIDTH, 2.3, PEAK_SMALL_WIDTH);
+    for (const w of widths) {
+      if (main) break;
+      const fit = tilesOf.find((p) => peakOverhang(c, id, p.x, p.y, w, shape, keepClear) === 0);
+      if (fit) main = { x: fit.x, y: fit.y, size, tiles: w, main: true };
+    }
+    if (!main) {
+      let best = tilesOf[0];
+      let least = Infinity;
+      for (const p of tilesOf) {
+        const o = peakOverhang(c, id, p.x, p.y, PEAK_SMALL_WIDTH, shape, keepClear);
+        if (o < least) {
+          least = o;
+          best = p;
+        }
+      }
+      main = { x: best.x, y: best.y, size, tiles: PEAK_SMALL_WIDTH, main: true };
+    }
+    out.push(main);
+    if (size < RANGE_MIN_TILES) continue;
+    const extra = Math.min(4, Math.floor(size / 45));
+    const mine: { x: number; y: number }[] = [main];
+    const cands = tilesOf.filter((p) => p.d >= 3).sort((a, b) => b.d - a.d || a.y - b.y || a.x - b.x);
+    for (const p of cands) {
+      if (mine.length > extra) break;
+      if (mine.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < RANGE_SPACING)) continue;
+      const w = [Math.min(3.4, 2.2 + p.d * 0.2), 2.4].find((t) => peakOverhang(c, id, p.x, p.y, t, shape, keepClear) === 0);
+      if (w === undefined) continue;
+      mine.push(p);
+      out.push({ x: p.x, y: p.y, size, tiles: w, main: false });
+    }
+  }
+  return out;
+}
