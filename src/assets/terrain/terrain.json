@@ -291,6 +291,42 @@
       "width": 173,
       "height": 108,
       "span": 1.35
+    },
+    "water-2": {
+      "type": "water",
+      "variant": 2,
+      "faceWidth": 1718,
+      "faceHeight": 1075,
+      "projectionRatio": 1.598,
+      "kind": "splat",
+      "file": "splat-water-2.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "water-3": {
+      "type": "water",
+      "variant": 3,
+      "faceWidth": 1719,
+      "faceHeight": 1082,
+      "projectionRatio": 1.589,
+      "kind": "splat",
+      "file": "splat-water-3.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
+    },
+    "water-4": {
+      "type": "water",
+      "variant": 4,
+      "faceWidth": 1718,
+      "faceHeight": 1075,
+      "projectionRatio": 1.598,
+      "kind": "splat",
+      "file": "splat-water-4.png",
+      "width": 173,
+      "height": 108,
+      "span": 1.35
     }
   }
 }
