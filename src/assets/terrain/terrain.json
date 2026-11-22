@@ -328,5 +328,55 @@
       "height": 108,
       "span": 1.35
     }
+  },
+  "polish": {
+    "edge-marsh-1": {
+      "anchorX": 0.5,
+      "anchorY": 0.5,
+      "baseWidth": 256,
+      "file": "splat-edge-marsh-1.png",
+      "width": 256,
+      "height": 160
+    },
+    "edge-water-1": {
+      "anchorX": 0.5,
+      "anchorY": 0.5,
+      "baseWidth": 256,
+      "file": "splat-edge-water-1.png",
+      "width": 256,
+      "height": 160
+    },
+    "forest-canopy-1": {
+      "anchorX": 0.50676,
+      "anchorY": 0.66709,
+      "baseWidth": 288,
+      "file": "props-forest-canopy-1.png",
+      "width": 295,
+      "height": 247
+    },
+    "forest-canopy-2": {
+      "anchorX": 0.49113,
+      "anchorY": 0.6678,
+      "baseWidth": 288,
+      "file": "props-forest-canopy-2.png",
+      "width": 305,
+      "height": 247
+    },
+    "hill-peak": {
+      "anchorX": 0.4997,
+      "anchorY": 0.6316,
+      "baseWidth": 600,
+      "file": "props-hill-peak.png",
+      "width": 600,
+      "height": 451
+    },
+    "tree-large-1": {
+      "anchorX": 0.48891,
+      "anchorY": 0.87391,
+      "baseWidth": 176,
+      "file": "props-tree-large-1.png",
+      "width": 283,
+      "height": 270
+    }
   }
 }
