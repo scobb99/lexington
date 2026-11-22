@@ -25,6 +25,16 @@ export const SAWMILL_PLOT = { x: 31, y: 25 };
 /** Section 17 step 6: the start marker, a meadow tile 4 tiles from the Cottage plot. */
 export const ROAD_START = { x: 27, y: 28 };
 
+/**
+ * The tiles the tutorial marks or builds on: the Cottage plot, the Sawmill's 2 x 2 footprint and
+ * the road between them. The terrain bake keeps the mountain peak art off these on the tutorial
+ * map, so the Sawmill is never drawn over the peak (render only; no rule uses this).
+ */
+export const TUTORIAL_MARKED_TILES: readonly (readonly [number, number])[] = [
+  [27, 24], [27, 25], [27, 26], [27, 27], [27, 28],
+  [28, 25], [29, 25], [30, 25], [31, 25], [32, 25], [31, 26], [32, 26],
+];
+
 const at = (map: TerrainMap, x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : map.tiles[y * MAP_W + x]);
 
 /**
@@ -143,6 +153,19 @@ const LAND_CAPTIONS = [
 ];
 
 export const STEP6_RETRY = 'That road is built and paid for. Now draw one that ends beside the marked Cottage plot.';
+
+// Steps 7 and 8, the build steps (bug fix, Nov 22, 2026: a building placed off the marked plot
+// used to stall the tutorial with no feedback). These three lines are build wording; the spec
+// gives the first one ("The glowing plot is the tutorial spot.") and the intent of the others.
+/** Placement ghost reason in steps 7 and 8 for a legal spot that is not the marked plot. */
+export const OFF_PLOT_REASON = 'The glowing plot is the tutorial spot.';
+/** Caption if a Cottage or Sawmill somehow stands off the plot (a safety net; the ghost blocks it). */
+export const OFF_PLOT_CAPTION: Record<'cottage' | 'sawmill', string> = {
+  cottage: 'That Cottage is off the tutorial spot. Choose Remove and tap the Cottage to take it away, then place a Cottage on the glowing plot.',
+  sawmill: 'That Sawmill is off the tutorial spot. Choose Remove and tap the Sawmill to take it away, then place a Sawmill on the glowing plot.',
+};
+/** Message when Remove is used on a road or a building on its plot in steps 7 and 8. */
+export const TUTORIAL_REMOVE_ONLY = 'In the tutorial, Remove only takes away a building placed off the glowing plot.';
 
 /** Every frame of the tutorial, in order. Frame ids are stable names used by the flow. */
 export const FRAMES: Record<string, Frame> = {
