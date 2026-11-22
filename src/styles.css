@@ -1,4 +1,4 @@
-/* WordCity dark UI (Build Spec v1.1, Section 3, Fork D).
+/* Lexington dark UI (Build Spec v2.0, Section 3, Fork D).
    Panels: dark warm charcoal brown, rounded corners, soft shadow, cream text.
    Headings: Fraunces. Body and buttons: Nunito Sans. Pill buttons with lighter tints of the
    panel colour for hover and selected. The map itself stays a bright spring scene. */
@@ -530,9 +530,7 @@ h2 {
   margin-left: 4px;
 }
 
-.pill:focus-visible,
-.tile:focus-visible,
-.word-input:focus-visible {
+.pill:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
@@ -556,14 +554,18 @@ h2 {
   height: 50px;
   border-radius: 10px;
   border: none;
-  background: #f4ead5;
+  background: url('./assets/ui/letter-tile.png') center / 100% 100% no-repeat;
   color: #3a2c20;
   font-family: var(--font-head);
   font-size: 24px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: inset 0 -4px 0 #d9c9a8, 0 2px 4px rgba(0, 0, 0, 0.3);
+  padding: 0;
   transition: transform 0.08s ease, opacity 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 
 .tile:hover {
@@ -571,9 +573,7 @@ h2 {
 }
 
 .tile-rare {
-  background: #e8dcff;
-  color: #4b3584;
-  box-shadow: inset 0 -4px 0 #c3aef0, 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: #5b3fa6;
 }
 
 .tile-used {
@@ -586,27 +586,6 @@ h2 {
   gap: 6px;
 }
 
-.word-input {
-  flex: 1;
-  min-width: 140px;
-  font-family: var(--font-head);
-  font-size: 20px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--cream);
-  background: #1f1a16;
-  border: 1px solid var(--panel-line);
-  border-radius: 999px;
-  padding: 6px 16px;
-}
-
-.word-input::placeholder {
-  font-family: var(--font-body);
-  font-size: 14px;
-  letter-spacing: 0;
-  text-transform: none;
-  color: #8e8070;
-}
 
 /* ---------- messages ---------- */
 
@@ -782,9 +761,9 @@ h2 {
     padding: 3px 5px;
   }
 
-  .resource svg {
-    width: 13px;
-    height: 13px;
+  .resource .resource-icon {
+    width: 15px;
+    height: 15px;
   }
 
   .town-stats > li:first-child::before {
@@ -885,21 +864,9 @@ h2 {
     gap: 5px;
   }
 
-  .word-input {
-    min-width: 0;
-    font-size: 17px;
-    letter-spacing: 2px;
-    padding: 6px 12px;
-  }
-
   .rack-controls .pill {
     padding: 7px 11px;
     font-size: 13px;
-  }
-
-  /* On a phone, tapping a used letter tile takes that letter back, so Clear is not needed. */
-  .rack-controls .clear-button {
-    display: none;
   }
 
   /* bottom sheet */
@@ -968,10 +935,6 @@ h2 {
 
 /* ---------- Saves panel (Section 11) ---------- */
 
-.hud-saves {
-  padding: 5px 14px;
-  font-size: 13.5px;
-}
 
 .dialog-backdrop {
   position: fixed;
@@ -1161,13 +1124,8 @@ h2 {
 }
 
 @media (max-width: 767px) {
-  .hud-saves {
+  .hud-menu {
     display: none;
-  }
-
-  .phone-saves {
-    padding: 8px 14px;
-    background: rgba(43, 36, 31, 0.94);
   }
 
   .dialog-backdrop {
@@ -1184,4 +1142,503 @@ h2 {
   .slot {
     padding: 9px 10px;
   }
+}
+
+/* =====================================================================================
+   v2.0 (Build Spec v2.0): word box, delete key, Hint and Swap; cost and placement bars;
+   build cards; menu; title screen; tutorial caption.
+   ===================================================================================== */
+
+/* ---------- Section 5: the word box is a display, never a text field ---------- */
+
+.word-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.word-box {
+  flex: 1;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #1f1a16;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.word-placeholder {
+  font-size: 14px;
+  color: #8e8070;
+}
+
+.word-letter {
+  min-width: 28px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: url('./assets/ui/letter-tile.png') center / 100% 100% no-repeat;
+  color: #3a2c20;
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.word-letter.tile-rare {
+  color: #5b3fa6;
+}
+
+.word-delete {
+  width: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-hover);
+  color: var(--cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+.word-delete:hover:not(:disabled) {
+  background: var(--panel-selected);
+}
+
+.word-delete:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tile-selected {
+  background-image: url('./assets/ui/letter-tile-selected.png');
+  transform: translateY(-3px) scale(1.04);
+}
+
+.tile-shake {
+  animation: tile-shake 0.4s ease;
+}
+
+@keyframes tile-shake {
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+.rack-swapping .tile-used {
+  opacity: 0.18;
+}
+
+.swap-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+.rack-controls {
+  flex-wrap: wrap;
+}
+
+.submit-button {
+  min-width: 96px;
+}
+
+/* ---------- Section 4 cost bar and Section 7 placement bar ---------- */
+
+.cost-bar,
+.place-bar {
+  position: absolute;
+  z-index: 6;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--panel-line);
+  max-width: min(440px, calc(100% - 24px));
+}
+
+.cost-bar {
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  border-color: var(--gold);
+}
+
+.cost-line,
+.place-line {
+  margin: 0;
+  font-weight: 800;
+}
+
+.cost-problem {
+  margin: 0;
+  color: var(--warn);
+  font-size: 13.5px;
+}
+
+.cost-buttons,
+.place-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.place-bar {
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+  white-space: normal;
+  width: max-content;
+}
+
+.place-bar-idle {
+  left: 50%;
+  bottom: 14px;
+}
+
+.place-ok {
+  border-color: #5fd068;
+}
+
+.place-ok .place-line {
+  color: var(--good);
+}
+
+.place-bad {
+  border-color: #e0533f;
+}
+
+.place-bad .place-line {
+  color: var(--error);
+}
+
+/* ---------- Section 7 build cards ---------- */
+
+.card-header {
+  display: block;
+  font-weight: 800;
+}
+
+.card-cost {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--gold);
+}
+
+.card-does,
+.card-goes,
+.card-state {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.card-does {
+  color: var(--cream);
+}
+
+.card-goes {
+  color: var(--muted);
+}
+
+.card-locked {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.card-short {
+  color: var(--error);
+}
+
+.catalog-locked {
+  opacity: 0.6;
+}
+
+.card-notes p {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.tool-locked {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.card-copy {
+  cursor: default;
+  margin-bottom: 4px;
+}
+
+/* ---------- Section 16 in-game menu ---------- */
+
+.menu-wrap {
+  position: relative;
+}
+
+.menu-button {
+  padding: 5px 14px;
+  font-size: 13.5px;
+}
+
+.menu-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-item {
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  color: var(--cream);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--panel-hover);
+}
+
+/* ---------- Section 16 title screen ---------- */
+
+.app-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.title-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: radial-gradient(ellipse at 50% 30%, #2f2720 0%, var(--bg) 70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.title-column {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.title-icon {
+  width: 220px;
+  height: auto;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
+}
+
+.title-name {
+  font-family: var(--font-head);
+  font-size: 44px;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+  margin: 0 0 6px;
+}
+
+.title-buttons {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.title-button {
+  width: 100%;
+  min-height: 52px;
+  font-size: 17px;
+}
+
+.title-line {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--muted);
+}
+
+.title-prompt {
+  color: var(--cream);
+}
+
+.title-warn {
+  color: var(--warn);
+}
+
+.title-footer {
+  margin-top: 28px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- Section 17 tutorial caption ---------- */
+
+.tutorial-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(560px, calc(100% - 24px));
+  padding: 14px 16px;
+  border: 1px solid var(--gold);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tutorial-step {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.tutorial-text p {
+  margin: 0 0 5px;
+  line-height: 1.45;
+}
+
+.tutorial-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tutorial-skip {
+  margin-left: auto;
+  background: transparent;
+}
+
+/* When the tutorial runs, the bars sit above the caption. */
+.app-tutorial .cost-bar,
+.app-tutorial .place-bar-idle {
+  bottom: auto;
+  top: 14px;
+}
+
+.tour-pulse {
+  position: relative;
+  outline: 3px solid var(--gold) !important;
+  outline-offset: 2px;
+  animation: tour-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tour-pulse {
+  0%, 100% { outline-color: rgba(242, 201, 76, 1); box-shadow: 0 0 0 0 rgba(242, 201, 76, 0.55); }
+  50% { outline-color: rgba(242, 201, 76, 0.45); box-shadow: 0 0 0 8px rgba(242, 201, 76, 0); }
+}
+
+/* ---------- v2.0 phone layout additions ---------- */
+
+@media (max-width: 767px) {
+  .word-box {
+    min-height: 38px;
+  }
+
+  .word-delete {
+    width: 48px;
+  }
+
+  .word-letter {
+    min-width: 24px;
+    height: 28px;
+    font-size: 16px;
+  }
+
+  .rack-controls .pill {
+    flex: 1 1 auto;
+  }
+
+  .phone-menu .menu-button {
+    padding: 8px 14px;
+    background: rgba(43, 36, 31, 0.94);
+  }
+
+  /* The cost bar, the placement bar and the tutorial caption sit just above the bottom dock. */
+  .cost-bar,
+  .place-bar,
+  .tutorial-caption {
+    position: fixed;
+    left: 8px !important;
+    right: 8px;
+    top: auto !important;
+    bottom: calc(var(--dock-h, 180px) + max(12px, env(safe-area-inset-bottom))) !important;
+    transform: none;
+    width: auto;
+    max-width: none;
+  }
+
+  .tutorial-caption {
+    padding: 10px 12px;
+    gap: 6px;
+    max-height: 46vh;
+    overflow-y: auto;
+  }
+
+  .tutorial-text p {
+    font-size: 13.5px;
+  }
+
+  /* With the tutorial caption showing, the bars move up to the top, under the HUD. */
+  .app-tutorial .cost-bar,
+  .app-tutorial .place-bar {
+    top: 96px !important;
+    bottom: auto !important;
+  }
+
+  .title-column {
+    max-width: none;
+  }
+
+  .title-icon {
+    width: 180px;
+  }
+
+  .title-name {
+    font-size: 38px;
+  }
+}
+
+.resource-icon {
+  object-fit: contain;
+  flex: none;
 }
