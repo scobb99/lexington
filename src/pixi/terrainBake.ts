@@ -17,11 +17,18 @@
 // adds flowers and pebbles, and the player never sees grid lines. The map's two front edges
 // show the soil slab from the Gemini tiles.
 //
-// v2.0 terrain polish (Section 13): a colour blending pass across the whole map; softer marsh
-// and water edges; cluster-aware props (terrainClusters.ts): prop scale and density grow with
-// patch size, big forests read as one thinner, lighter canopy rather than rows of trees, and a
-// large hill patch gets a mountain peak at its centre. The new Gemini polish pieces drop in
-// through POLISH_ART (terrainVariants.ts); until they exist, the approved art stands in.
+// v2.0 terrain polish (Section 13, with Stu's ruling of Nov 22, 2026: blending is a general
+// requirement of the pass, not only an edge treatment). The blending lives in the splat system:
+//  - every tile on a terrain boundary spills a softer, fainter copy of its own splat across the
+//    boundary, in both directions (water into land and land back over water), so no boundary
+//    shows the diamond grid;
+//  - forest, hill and thicket ground gets a wide, faint feather as well as its core colour;
+//  - a light colour wash runs across the whole map;
+//  - the Gemini edge pieces add bank detail on the front-facing banks (support, not the fix).
+// Cluster-aware props (terrainClusters.ts): prop scale and density grow with patch size, big
+// forest interiors are the Gemini canopy pieces, forest edges mix in the large tree, and every
+// hill patch of 4+ tiles gets the Gemini mountain peak at its centre (very large patches add
+// smaller peaks on their deep interior). Building grounding lives in buildingLayer.ts.
 
 import {
   Assets,
@@ -41,10 +48,11 @@ import terrainMeta from '../assets/terrain/terrain.json';
 import { gridToWorld, tileCentre } from './camera';
 import { TERRAIN_URLS } from './terrainAssets';
 import { POLISH_ART, VARIANTS, effectiveTiles, planVariants, tileHash } from './terrainVariants';
-import { CANOPY_MIN_TILES, findClusters, peakTiles, propScale } from './terrainClusters';
+import { CANOPY_MIN_TILES, findClusters, peakSites, propScale } from './terrainClusters';
+import { TUTORIAL_MARKED_TILES, TUTORIAL_SEED } from '../game/tutorial';
 
 /** Room above the map's top vertex for trees and hills on the back rows. */
-export const BAKE_PAD_TOP = 56;
+export const BAKE_PAD_TOP = 170; // v2.0: room for a mountain peak on the back rows
 /** Height of the soil slab drawn under the map's two front edges. */
 export const EDGE_DEPTH = 22;
 
@@ -60,6 +68,8 @@ interface VariantArt {
 const TYPES = terrainMeta.types as Record<string, { groundColor: string; soilColor: string; bankColor?: string }>;
 const ART = terrainMeta.variants as unknown as Record<string, VariantArt>;
 const DENSITY = terrainMeta.textureDensity;
+/** Measured anchors of the Section 13 polish pieces (written by process_art.py). */
+const POLISH_META = ((terrainMeta as unknown as { polish?: Record<string, { anchorX: number; anchorY: number; baseWidth: number; height?: number }> }).polish ?? {});
 
 const hex = (c: string) => parseInt(c.replace('#', ''), 16);
 /** Blends two colours (k = 0 gives a, 1 gives b). */
@@ -116,22 +126,33 @@ export async function loadTerrainTextures(): Promise<TerrainTextures> {
 }
 
 /** The polish piece for a use, if its art has arrived (Section 13), else null. */
-function polishFor(tex: TerrainTextures, use: string, pick: number): { art: (typeof POLISH_ART)[number]; texture: Texture } | null {
+function polishFor(tex: TerrainTextures, use: string, pick: number): { anchorX: number; anchorY: number; baseWidth: number; tiles: number; texture: Texture } | null {
   const ready = POLISH_ART.filter((a) => a.use === use && tex['polish-' + a.id]);
   if (!ready.length) return null;
   const art = ready[Math.floor(pick * ready.length) % ready.length];
-  return { art, texture: tex['polish-' + art.id] };
+  const texture = tex['polish-' + art.id];
+  const m = POLISH_META[art.id];
+  return { anchorX: m?.anchorX ?? art.anchorX, anchorY: m?.anchorY ?? art.anchorY, baseWidth: m?.baseWidth ?? texture.width, tiles: art.tiles, texture };
 }
 
 // ---------- drawing helpers ----------
 
-/** Draws a texture into a rectangle as a texture fill (optionally mirrored). */
-function stamp(g: Graphics, tex: Texture, x: number, y: number, w: number, h: number, flipX = false): void {
+/** Draws a texture into a rectangle as a texture fill (optionally mirrored, optionally faint). */
+function stamp(g: Graphics, tex: Texture, x: number, y: number, w: number, h: number, flipX = false, alpha = 1): void {
   const sx = (w / tex.width) * (flipX ? -1 : 1);
   const m = new Matrix(sx, 0, 0, h / tex.height, flipX ? x + w : x, y);
-  g.beginTextureFill({ texture: tex, matrix: m });
+  g.beginTextureFill({ texture: tex, matrix: m, alpha });
   g.drawRect(x, y, w, h);
   g.endFill();
+}
+
+/** Stamps a polish piece so its ground part is `tiles` tiles wide, anchored at world (cx, cy). */
+function stampPolish(g: Graphics, p: NonNullable<ReturnType<typeof polishFor>>, cx: number, cy: number, tiles: number, flip: boolean, alpha = 1): void {
+  const k = (TILE_W * tiles) / p.baseWidth;
+  const w = p.texture.width * k;
+  const h = p.texture.height * k;
+  const ax = flip ? 1 - p.anchorX : p.anchorX;
+  stamp(g, p.texture, cx - ax * w, cy - p.anchorY * h, w, h, flip, alpha);
 }
 
 /** An irregular, roughly diamond-shaped blob around a tile centre (for feathered colour). */
@@ -165,6 +186,9 @@ export function mapDiamond(): number[] {
   return [t.x, t.y, r.x, r.y, b.x, b.y, l.x, l.y];
 }
 
+// The four grid neighbours, with their screen direction (north and west are at the back).
+const N4: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
 // ---------- the bake ----------
 
 /** Uses a sharper texture when the GPU allows a big enough one (desktop GPUs: 8,192 px). */
@@ -194,7 +218,8 @@ export function bakeTerrain(
   const tiles = effectiveTiles(map.tiles, cleared);
   const plan = planVariants(map.seed, tiles);
   const clusters = findClusters(tiles);
-  const at = (x: number, y: number) => tiles[y * MAP_W + x];
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : tiles[y * MAP_W + x]);
+  const h = (x: number, y: number, salt: number) => tileHash(map.seed, x, y, salt);
 
   // Everything is drawn in world coordinates inside `root`, shifted down by the top padding.
   const root = new Container();
@@ -207,43 +232,71 @@ export function bakeTerrain(
   root.addChild(clip, ground);
   ground.addChild(new Graphics().beginFill(COLORS.meadow).drawPolygon(mapDiamond()).endFill());
 
+  /** One splat of a variant, centred at world (cx, cy). */
+  const splatAt = (g: Graphics, id: string, cx: number, cy: number, scale: number, flip: boolean, alpha = 1) => {
+    const art = ART[id];
+    const w = TILE_W * (art.span ?? 1.35) * scale;
+    const hh = TILE_H * (art.span ?? 1.35) * scale;
+    stamp(g, tex[id], cx - w / 2, cy - hh / 2, w, hh, flip, alpha);
+  };
+
   /** Splats for tiles of one terrain type (each tile's own variant), or calm meadow under all. */
   const splats = (type: number | 'under'): Graphics => {
     const g = new Graphics();
     for (const [x, y] of order) {
       const i = y * MAP_W + x;
-      let id: string;
-      let flip: boolean;
+      const c = tileCentre(x, y);
       if (type === 'under') {
         if (at(x, y) === Terrain.Meadow) continue;
-        id = tileHash(map.seed, x, y, 3) < 0.5 ? 'meadow-1' : 'meadow-3';
-        flip = tileHash(map.seed, x, y, 4) < 0.5;
-      } else {
-        if (at(x, y) !== type) continue;
-        id = plan[i].entry.id;
-        flip = plan[i].flip;
+        splatAt(g, h(x, y, 3) < 0.5 ? 'meadow-1' : 'meadow-3', c.x + (h(x, y, 5) - 0.5) * 4, c.y, 1, h(x, y, 4) < 0.5);
+        continue;
       }
-      const art = ART[id];
-      const w = TILE_W * (art.span ?? 1.35);
-      const h = TILE_H * (art.span ?? 1.35);
-      const c = tileCentre(x, y);
-      stamp(g, tex[id], c.x - w / 2 + (tileHash(map.seed, x, y, 5) - 0.5) * 4, c.y - h / 2, w, h, flip);
+      if (at(x, y) !== type) continue;
+      splatAt(g, plan[i].entry.id, c.x + (h(x, y, 5) - 0.5) * 4, c.y, 1, plan[i].flip);
     }
     return g;
   };
+
+  /**
+   * Section 13 blending, in the splat system: every tile of `type` that borders a tile of
+   * another kind (`into` decides which) spills a fainter, slightly smaller copy of its own splat
+   * part of the way across the boundary, with a little seeded jitter, so the boundary reads as a
+   * soft, irregular edge instead of a row of diamonds.
+   */
+  const spills = (type: number, into: (t: number) => boolean, reach: number, alpha: number, salt: number): Graphics => {
+    const g = new Graphics();
+    for (const [x, y] of order) {
+      if (at(x, y) !== type) continue;
+      const i = y * MAP_W + x;
+      const id = type === Terrain.Meadow ? (h(x, y, 3) < 0.5 ? 'meadow-1' : 'meadow-3') : plan[i].entry.id;
+      for (const [dx, dy] of N4) {
+        const t = at(x + dx, y + dy);
+        if (t === -1 || t === type || !into(t)) continue;
+        const r = reach * (0.8 + h(x + dx, y + dy, salt) * 0.4);
+        const c = tileCentre(x + dx * r, y + dy * r);
+        const jx = (h(x, y, salt + 1) - 0.5) * 10;
+        const jy = (h(x, y, salt + 2) - 0.5) * 6;
+        splatAt(g, id, c.x + jx, c.y + jy, 0.78 + h(x, y, salt + 3) * 0.2, h(x, y, salt + 4) < 0.5, alpha);
+      }
+    }
+    return g;
+  };
+  const isWet = (t: number) => t === Terrain.Water || t === Terrain.Marsh;
+  const isLand = (t: number) => t !== Terrain.Water;
+
   // Meadow: every meadow tile shows its own variant; other tiles get calm meadow underneath.
   ground.addChild(splats('under'));
   ground.addChild(splats(Terrain.Meadow));
 
   // Feathered colour for terrains whose surface is their sampled Gemini ground colour.
-  const feathered = (types: [number, number, number][], strength: number): Container => {
+  const feathered = (types: [number, number, number, number][], strength: number): Container => {
     const g = new Graphics();
     for (const [x, y] of order) {
       const t = at(x, y);
-      for (const [type, color, scale] of types) {
+      for (const [type, color, scale, alpha] of types) {
         if (t !== type) continue;
         const c = tileCentre(x, y);
-        g.beginFill(color).drawPolygon(blob(c.x, c.y, scale, rand)).endFill();
+        g.beginFill(color, alpha).drawPolygon(blob(c.x, c.y, scale, rand)).endFill();
       }
     }
     const holder = new Container();
@@ -252,47 +305,72 @@ export function bakeTerrain(
     holder.filterArea = new Rectangle(0, BAKE_PAD_TOP, WORLD_W, WORLD_H);
     return holder;
   };
+  // Forest, hill and thicket ground: a wide, faint feather first (the soft transition), then the
+  // core colour.
   ground.addChild(
     feathered(
       [
-        [Terrain.Hill, COLORS.hill, 1.15],
-        [Terrain.Forest, COLORS.forest, 1.15],
-        [Terrain.Thicket, COLORS.thicket, 1.12],
+        [Terrain.Hill, COLORS.hill, 1.75, 0.45],
+        [Terrain.Forest, COLORS.forest, 1.75, 0.45],
+        [Terrain.Thicket, mix(COLORS.thicket, COLORS.meadow, 0.5), 1.7, 0.35],
+      ],
+      14,
+    ),
+  );
+  ground.addChild(
+    feathered(
+      [
+        [Terrain.Hill, COLORS.hill, 1.15, 1],
+        [Terrain.Forest, COLORS.forest, 1.15, 1],
+        [Terrain.Thicket, COLORS.thicket, 0.92, 1], // inside the pulled-in bramble edge, so no dark rim shows
       ],
       6,
     ),
   );
-  // Section 13: softer marsh edges: a wide, well-blurred marsh wash under the marsh splats.
-  ground.addChild(feathered([[Terrain.Marsh, mix(COLORS.marsh, COLORS.meadow, 0.45), 1.45]], 11));
-  ground.addChild(feathered([[Terrain.Marsh, COLORS.marsh, 1.05]], 7));
+  // Marsh: a wide, well-blurred wash, its core colour, its splats, then spills across every edge.
+  ground.addChild(feathered([[Terrain.Marsh, mix(COLORS.marsh, COLORS.meadow, 0.45), 1.6, 1]], 12));
+  ground.addChild(feathered([[Terrain.Marsh, COLORS.marsh, 1.05, 1]], 7));
   ground.addChild(splats(Terrain.Marsh));
-  // Water: a lighter bank edge first (Section 3), then the river colour, then the Gemini water
-  // face. Section 13: the bank is wider and softer, so the river meets the land gently.
-  ground.addChild(feathered([[Terrain.Water, mix(COLORS.bank, COLORS.meadow, 0.35), 1.85]], 12));
-  ground.addChild(feathered([[Terrain.Water, COLORS.bank, 1.45]], 8));
-  ground.addChild(feathered([[Terrain.Water, COLORS.water, 1.05]], 4));
+  ground.addChild(spills(Terrain.Marsh, (t) => t !== Terrain.Water, 0.42, 0.5, 31));
+  // Water: the lighter bank (Section 3), the river colour, the Gemini water face, then spills.
+  ground.addChild(feathered([[Terrain.Water, mix(COLORS.bank, COLORS.meadow, 0.35), 1.85, 1]], 12));
+  ground.addChild(feathered([[Terrain.Water, COLORS.bank, 1.45, 1]], 8));
+  ground.addChild(feathered([[Terrain.Water, COLORS.water, 1.05, 1]], 4));
   ground.addChild(splats(Terrain.Water));
-  // Edge pieces (Section 13 art slots), when they arrive.
-  const edgeArt = (type: number, use: string) => {
-    const g = new Graphics();
-    for (const [x, y] of order) {
-      if (at(x, y) !== type || clusters.depth[y * MAP_W + x] !== 1) continue;
-      const piece = polishFor(tex, use, tileHash(map.seed, x, y, 21));
-      if (!piece) return null;
-      const w = TILE_W * piece.art.tiles;
-      const h = (w * piece.texture.height) / piece.texture.width;
-      const c = tileCentre(x, y);
-      stamp(g, piece.texture, c.x - piece.art.anchorX * w, c.y - piece.art.anchorY * h, w, h, tileHash(map.seed, x, y, 22) < 0.5);
-    }
-    return g;
-  };
-  for (const [type, use] of [[Terrain.Marsh, 'marshEdge'], [Terrain.Water, 'waterEdge']] as const) {
-    const g = edgeArt(type, use);
-    if (g) ground.addChild(g);
-  }
+  ground.addChild(spills(Terrain.Water, isLand, 0.36, 0.4, 41));
+  // The shore pass: land spills back over the water and marsh edge (the other direction), so the
+  // two sides of every wet boundary meet in a gradient rather than a line.
+  ground.addChild(spills(Terrain.Meadow, isWet, 0.28, 0.18, 51));
+  ground.addChild(spills(Terrain.Marsh, (t) => t === Terrain.Water, 0.3, 0.3, 61));
 
-  // ---- Section 13: colour blending pass across the whole map. Every tile's own colour is
+  // ---- Section 13 edge pieces (support): bank detail on the front-facing banks. The Gemini
+  // pieces have land at their lower left, which is a land tile to the south (+y); mirrored, a
+  // land tile to the east (+x). Back banks (north, west) are hidden behind the water's far side
+  // and keep the splat blend only.
+  const edges = new Graphics();
+  for (const [x, y] of order) {
+    const t = at(x, y);
+    if (t !== Terrain.Water && t !== Terrain.Marsh) continue;
+    for (const [dx, dy, flip] of [[0, 1, false], [1, 0, true]] as const) {
+      const n = at(x + dx, y + dy);
+      if (n !== Terrain.Meadow) continue; // both pieces show grass on their land side
+      // About a quarter of the meadow banks, so the art never
+      // repeats in a row; the marsh piece smaller and fainter (it carries reeds, not colour).
+      const wet = t === Terrain.Water;
+      if (h(x, y, 71 + dx) >= 0.25) continue;
+      const piece = polishFor(tex, wet ? 'waterEdge' : 'marshEdge', h(x, y, 73));
+      if (!piece) continue;
+      const c = tileCentre(x + dx * 0.5, y + dy * 0.5);
+      const size = piece.tiles * (wet ? 0.75 + h(x, y, 74) * 0.45 : 0.7 + h(x, y, 74) * 0.25);
+      stampPolish(edges, piece, c.x + (h(x, y, 75) - 0.5) * 12, c.y, size, flip, wet ? 0.75 : 0.6);
+    }
+  }
+  ground.addChild(edges);
+
+  // ---- Section 13: colour blending pass across the whole map. Every dry tile's own colour is
   // washed very lightly over its neighbours, so biome colours harmonise instead of meeting hard.
+  // Water and marsh are not wash sources: they blend through their spills, and a wash over them
+  // greys the river and flattens the marsh reeds.
   const wash = new Graphics();
   const washColor: Record<number, number> = {
     [Terrain.Meadow]: COLORS.meadow,
@@ -303,9 +381,18 @@ export function bakeTerrain(
   };
   for (const [x, y] of order) {
     const t = at(x, y);
-    if (t === Terrain.Water) continue;
+    if (t === Terrain.Water || t === Terrain.Marsh) continue;
     const c = tileCentre(x, y);
-    wash.beginFill(washColor[t], 0.16).drawPolygon(blob(c.x, c.y, 1.7, rand)).endFill();
+    wash.beginFill(washColor[t], 0.14).drawPolygon(blob(c.x, c.y, 1.6, rand)).endFill();
+  }
+  // Rock ground under each mountain peak, so the peak's base sits in the hill rather than on it.
+  // The peak's outline comes from the processed art, so a re-run of the pipeline keeps it on its hill.
+  const pm = POLISH_META['hill-peak'];
+  const keepClear = map.seedText.trim().toLowerCase() === TUTORIAL_SEED ? new Set(TUTORIAL_MARKED_TILES.map(([x, y]) => y * MAP_W + x)) : undefined;
+  const peaks = peakSites(clusters, pm?.height && pm.baseWidth ? { aspect: pm.height / pm.baseWidth, anchorY: pm.anchorY } : undefined, keepClear);
+  for (const p of peaks) {
+    const c = tileCentre(p.x, p.y);
+    wash.beginFill(0x9a8f80, 0.55).drawPolygon(blob(c.x, c.y, p.tiles * 0.55, rand)).endFill();
   }
   const washHolder = new Container();
   washHolder.addChild(wash);
@@ -337,22 +424,19 @@ export function bakeTerrain(
   }
   root.addChild(decor);
 
-  // ---- 4. Props (trees, hill mounds, brambles), back to front, cluster-aware (Section 13)
+  // ---- 4. Props (trees, hill mounds, brambles, peaks), back to front, cluster-aware (Section 13)
   const props = new Graphics();
-  const peaks = peakTiles(clusters);
   const peakAt = new Map(peaks.map((p) => [p.y * MAP_W + p.x, p]));
-  // Mounds right around a peak are left out, so the peak reads as one mountain.
-  const nearPeak = new Set<number>();
-  for (const p of peaks)
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) nearPeak.add((p.y + dy) * MAP_W + p.x + dx);
-  const stampArt = (id: string, x: number, y: number, scale: number, flip: boolean) => {
+  // Mounds under or right in front of a peak are left out, so the peak reads as one mountain.
+  const underPeak = (x: number, y: number) => peaks.some((p) => Math.hypot(x - p.x, y - p.y) < p.tiles * 0.62);
+  const stampArt = (id: string, x: number, y: number, scale: number, flip: boolean, offX = 0, offY = 0, alpha = 1) => {
     const art = ART[id];
-    const k = (scale * (0.92 + tileHash(map.seed, x, y, 7) * 0.16)) / DENSITY;
+    const k = (scale * (0.92 + h(x, y, 7) * 0.16)) / DENSITY;
     const w = art.width * k;
-    const h = art.height * k;
-    const c = tileCentre(x, y);
+    const hh = art.height * k;
+    const c = tileCentre(x + offX, y + offY);
     const ax = flip ? 1 - (art.anchorX ?? 0.5) : art.anchorX ?? 0.5;
-    stamp(props, tex[id], c.x - ax * w, c.y - (art.anchorY ?? 0.5) * h, w, h, flip);
+    stamp(props, tex[id], c.x - ax * w, c.y - (art.anchorY ?? 0.5) * hh, w, hh, flip, alpha);
   };
   for (const [x, y] of order) {
     const i = y * MAP_W + x;
@@ -363,60 +447,59 @@ export function bakeTerrain(
     const size = clusters.size[id];
     const depth = clusters.depth[i];
     const grow = propScale(size, depth);
+    const big = Math.min(1, (size - 1) / 15);
 
     if (t === Terrain.Hill) {
       const peak = peakAt.get(i);
       if (peak) {
-        // Mountain peak at the centre of a large hill patch: the Gemini peak piece when it
-        // arrives, until then the rockiest approved hill art, scaled to the patch.
-        const piece = polishFor(tex, 'hillPeak', tileHash(map.seed, x, y, 23));
-        const k = Math.min(1.35, 1 + (peak.size - 4) / 30);
-        if (piece) {
-          const w = TILE_W * piece.art.tiles * k;
-          const h = (w * piece.texture.height) / piece.texture.width;
-          const c = tileCentre(x, y);
-          stamp(props, piece.texture, c.x - piece.art.anchorX * w, c.y - piece.art.anchorY * h, w, h, pick.flip);
-        } else stampArt('hill-4', x, y, 2.1 * k, pick.flip);
+        // The Gemini mountain peak (Stu-approved as generated). Until it is in the folder, the
+        // rockiest approved hill art, scaled to the patch, stands in.
+        const piece = polishFor(tex, 'hillPeak', h(x, y, 23));
+        const c = tileCentre(x, y);
+        if (piece) stampPolish(props, piece, c.x, c.y, peak.tiles, pick.flip);
+        else stampArt('hill-4', x, y, 0.8 * peak.tiles, pick.flip);
         continue;
       }
-      if (nearPeak.has(i)) continue;
-      // Mounds on about a third of the tiles (always on the rockiest centre tiles). In big
-      // patches the mounds grow, so fewer are drawn and the patch reads as rolling ground.
-      const big = Math.min(1, (size - 1) / 15);
-      if (!pick.entry.where && tileHash(map.seed, x, y, 6) >= 0.32 * (1 - 0.4 * big)) continue;
+      if (underPeak(x, y)) continue;
+      // Foothill mounds on about a third of the tiles (always on the rockiest centre tiles). In
+      // big patches the mounds grow, so fewer are drawn and the patch reads as rolling ground.
+      if (h(x, y, 6) >= (pick.entry.where && !big ? 1 : 0.32 * (1 - 0.5 * big))) continue;
       stampArt(pick.entry.id, x, y, 1.15 * (1 + 0.6 * (grow - 1)), pick.flip);
       continue;
     }
 
     if (t === Terrain.Forest) {
-      // Big forests read as one canopy: inside the edge, larger trees on every other tile, so
-      // the crowns overlap and the forest reads lighter and less like rows of separate trees.
+      // Big forests read as one canopy: inside the edge, the Gemini canopy pieces on every other
+      // tile, so the crowns overlap into one continuous, lighter canopy.
       if (size >= CANOPY_MIN_TILES && depth >= 2) {
         if ((x + y) % 2 === 1) continue;
-        const piece = polishFor(tex, 'forestCanopy', tileHash(map.seed, x, y, 24));
-        if (piece) {
-          const w = TILE_W * piece.art.tiles;
-          const h = (w * piece.texture.height) / piece.texture.width;
-          const c = tileCentre(x, y);
-          stamp(props, piece.texture, c.x - piece.art.anchorX * w, c.y - piece.art.anchorY * h, w, h, pick.flip);
-        } else stampArt(pick.entry.id === 'forest-2' ? 'forest-1' : pick.entry.id, x, y, 1.5 * grow, pick.flip);
+        const piece = polishFor(tex, 'forestCanopy', h(x, y, 24));
+        const c = tileCentre(x, y);
+        if (piece) stampPolish(props, piece, c.x + (h(x, y, 26) - 0.5) * 6, c.y, piece.tiles * (0.95 + h(x, y, 27) * 0.15), pick.flip);
+        else stampArt(pick.entry.id === 'forest-2' ? 'forest-1' : pick.entry.id, x, y, 1.5 * grow, pick.flip);
         continue;
       }
       // Forest edges are thinned: about one tile in five shows only its ground (lighter treatment).
-      if (tileHash(map.seed, x, y, 8) < 0.2) continue;
-      const large = depth === 1 ? polishFor(tex, 'treeLarge', tileHash(map.seed, x, y, 25)) : null;
+      if (h(x, y, 8) < 0.2) continue;
+      // The large single tree stands on some edge tiles and on most lone forest tiles.
+      const lone = size <= 2;
+      const large = h(x, y, 25) < (lone ? 0.6 : 0.22) ? polishFor(tex, 'treeLarge', h(x, y, 28)) : null;
       if (large) {
-        const w = TILE_W * large.art.tiles * grow;
-        const h = (w * large.texture.height) / large.texture.width;
         const c = tileCentre(x, y);
-        stamp(props, large.texture, c.x - large.art.anchorX * w, c.y - large.art.anchorY * h, w, h, pick.flip);
+        stampPolish(props, large, c.x, c.y, large.tiles * (0.9 + h(x, y, 29) * 0.2) * Math.min(1.2, grow), pick.flip);
       } else stampArt(pick.entry.id, x, y, grow, pick.flip);
       continue;
     }
 
-    // Thicket: scaled with its patch; deep inside a patch, every other tile, larger.
+    // Thicket: scaled with its patch. Edge tiles are drawn a little smaller and pulled toward the
+    // patch, so the bramble mat ends in a ragged, soft edge instead of a hard square.
     if (depth >= 2 && size >= CANOPY_MIN_TILES && (x + y) % 2 === 1) continue;
-    stampArt(pick.entry.id, x, y, depth >= 2 && size >= CANOPY_MIN_TILES ? 1.3 * grow : grow, pick.flip);
+    if (depth === 1) {
+      const cen = clusters.centre[id];
+      const dx = Math.sign(cen.x - x) * 0.14;
+      const dy = Math.sign(cen.y - y) * 0.14;
+      stampArt(pick.entry.id, x, y, 0.84 * grow, pick.flip, dx, dy, 0.92);
+    } else stampArt(pick.entry.id, x, y, size >= CANOPY_MIN_TILES ? 1.3 * grow : grow, pick.flip);
   }
   root.addChild(props);
 
