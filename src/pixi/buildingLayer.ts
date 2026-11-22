@@ -103,7 +103,7 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
     grounding.clear();
     for (const b of store.state.buildings) {
       const d = BUILDINGS[b.type];
-      if (b.type !== 'pier') drawGrounding(grounding, b.x, b.y, d.w, d.h);
+      drawGrounding(grounding, b.x, b.y, d.w, d.h); // every building, the Pier included (Section 13 ruling)
     }
     const live = new Set<number>();
     for (const b of store.state.buildings) {
