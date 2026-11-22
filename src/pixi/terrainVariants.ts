@@ -29,7 +29,8 @@ export type PositionTag =
   | 'nextToWater' // wettest marsh: only next to water
   | 'awayFromWater' // driest marsh: only where no neighbour is water
   | 'riverPath' // flowing-ripple water: only on narrow river water
-  | 'wideWater'; // calmest water: only on wide or still water
+  | 'wideWater' // calmest water: only on wide or still water
+  | 'waterEdge'; // water bank with reeds: only on water next to land (4 neighbours)
 
 export interface VariantEntry {
   /** Matches the processed art (terrain.json "variants" key), e.g. "forest-2". */
@@ -73,8 +74,11 @@ export const VARIANTS: VariantEntry[] = [
   { id: 'thicket-2', type: 'thicket', weight: 2, note: 'brambles with bare branches' },
   { id: 'thicket-3', type: 'thicket', weight: 2, note: 'brambles with berries' },
   { id: 'thicket-4', type: 'thicket', weight: 1, where: 'thicketSurrounded', boost: 3, note: 'densest' },
-  // Water: one tile until the Gemini variants arrive (mirroring still applies).
+  // Water: the four Gemini variants (v2.0: water-2 to water-4 delivered Nov 20, 2026).
   { id: 'water-1', type: 'water', weight: 4, note: 'river water' },
+  { id: 'water-2', type: 'water', weight: 2, where: 'riverPath', boost: 2, note: 'flowing ripples: on the river path' },
+  { id: 'water-3', type: 'water', weight: 1, where: 'waterEdge', note: 'bank with reeds: water beside land' },
+  { id: 'water-4', type: 'water', weight: 2, where: 'wideWater', boost: 2, note: 'calm glassy: wide or still water' },
 ];
 
 const TYPE_CODE: Record<TerrainName, number> = {
@@ -130,6 +134,8 @@ export function positionHolds(tag: PositionTag, tiles: Uint8Array, x: number, y:
       return self === Terrain.Water && n8.filter((t) => t === Terrain.Water).length <= 5;
     case 'wideWater':
       return self === Terrain.Water && n8.every((t) => t === Terrain.Water);
+    case 'waterEdge':
+      return self === Terrain.Water && n4.some((t) => t !== -1 && t !== Terrain.Water);
   }
 }
 
@@ -170,9 +176,49 @@ export function planVariants(seed: number, tiles: Uint8Array): VariantPick[] {
   return out;
 }
 
-/** Effective terrain for rendering and rules: a cleared forest tile behaves as meadow. */
-export function effectiveTiles(tiles: Uint8Array, forestCleared: Uint8Array): Uint8Array {
+/**
+ * Effective terrain for rendering and rules (Section 4, v2.0): a cleared forest, cleared thicket
+ * or drained marsh tile behaves as meadow.
+ */
+export function effectiveTiles(tiles: Uint8Array, cleared: Uint8Array): Uint8Array {
   const out = tiles.slice();
-  for (let i = 0; i < out.length; i++) if (forestCleared[i] && out[i] === Terrain.Forest) out[i] = Terrain.Meadow;
+  for (let i = 0; i < out.length; i++) {
+    if (cleared[i] && (out[i] === Terrain.Forest || out[i] === Terrain.Thicket || out[i] === Terrain.Marsh)) out[i] = Terrain.Meadow;
+  }
   return out;
 }
+
+// ---------- Section 13 (v2.0): terrain polish art slots ----------
+//
+// The polish pass needs a small Gemini art commission that is not ready yet: a mountain peak
+// for large hill clusters, larger tree and canopy art, and soft marsh and water edge pieces.
+// Each piece has its slot here already. DROPPING ONE IN LATER: put the Gemini JPG through
+// scripts/art/process_art.py as polish-<name>.jpg; it writes the PNG named in `file` below into
+// src/assets/terrain/, and the game uses it on the next build. No code changes. Until a piece
+// exists, the bake uses the fallback named in `fallback` (existing approved art, scaled).
+
+export type PolishUse = 'hillPeak' | 'forestCanopy' | 'treeLarge' | 'marshEdge' | 'waterEdge';
+
+export interface PolishArt {
+  id: string;
+  use: PolishUse;
+  /** The processed file name the bake looks for. */
+  file: string;
+  /** Where the art sits on its tile (fractions of the image), and its size in tile widths. */
+  anchorX: number;
+  anchorY: number;
+  tiles: number;
+  /** Existing art used until this piece arrives (a variant id), or null for none. */
+  fallback: string | null;
+  note: string;
+}
+
+// prettier-ignore
+export const POLISH_ART: PolishArt[] = [
+  { id: 'hill-peak', use: 'hillPeak', file: 'props-hill-peak.png', anchorX: 0.5, anchorY: 0.82, tiles: 2.6, fallback: 'hill-4', note: 'mountain peak for hill patches of 4+ tiles' },
+  { id: 'forest-canopy-1', use: 'forestCanopy', file: 'props-forest-canopy-1.png', anchorX: 0.5, anchorY: 0.8, tiles: 1.9, fallback: 'forest-1', note: 'continuous canopy for big forest interiors' },
+  { id: 'forest-canopy-2', use: 'forestCanopy', file: 'props-forest-canopy-2.png', anchorX: 0.5, anchorY: 0.8, tiles: 1.9, fallback: 'forest-3', note: 'second canopy piece' },
+  { id: 'tree-large-1', use: 'treeLarge', file: 'props-tree-large-1.png', anchorX: 0.5, anchorY: 0.9, tiles: 1.2, fallback: null, note: 'larger single tree for forest edges' },
+  { id: 'edge-marsh-1', use: 'marshEdge', file: 'splat-edge-marsh-1.png', anchorX: 0.5, anchorY: 0.5, tiles: 1.6, fallback: null, note: 'soft marsh-to-meadow transition' },
+  { id: 'edge-water-1', use: 'waterEdge', file: 'splat-edge-water-1.png', anchorX: 0.5, anchorY: 0.5, tiles: 1.6, fallback: null, note: 'soft water bank transition' },
+];
