@@ -1,6 +1,6 @@
-// Camera and isometric projection (Build Spec v1.2, Section 2).
+// Camera and isometric projection (Build Spec v2.0, Section 2).
 // Logic runs on the square 54 x 54 grid; this file turns grid positions into isometric world
-// pixels (64 x 32 diamonds) and back. Camera: drag to pan, wheel or trackpad to zoom, pinch
+// pixels (64 x 40 diamonds) and back. Camera: drag to pan, wheel or trackpad to zoom, pinch
 // zoom. Zoom 0.5 to 2.5, centred on the pointer. Pan is clamped so the world edge can never
 // move more than 200 px past the viewport edge. Uses unified Pointer Events (Section 10).
 
@@ -117,14 +117,16 @@ export interface CameraOptions {
   onChange: (cam: Camera) => void;
   onTap: (screenX: number, screenY: number, cam: Camera) => void;
   /**
-   * True while a painting tool (road, bridge, clear forest) is selected. Then a one-finger or
-   * left-button drag paints tiles instead of panning. The right or middle mouse button, and
-   * two fingers, always pan.
+   * Asked when a one-finger or left-button press starts: true means this drag draws (a road
+   * preview, or the phone's placement ghost) instead of panning. The right or middle mouse
+   * button, and two fingers, always pan.
    */
-  paintMode?: () => boolean;
+  paintMode?: (screenX: number, screenY: number, cam: Camera, pointerType: string) => boolean;
   onPaint?: (phase: PaintPhase, screenX: number, screenY: number, cam: Camera) => void;
   /** Pointer moved over the map (or left it: null), for the placement preview. */
   onHover?: (screenX: number | null, screenY: number | null, cam: Camera) => void;
+  /** A right-button click with no drag (Section 4: cancels an active road preview). */
+  onSecondaryTap?: (screenX: number, screenY: number, cam: Camera) => void;
 }
 
 export function attachCamera(opts: CameraOptions): CameraController {
@@ -149,6 +151,7 @@ export function attachCamera(opts: CameraOptions): CameraController {
   let moved = false;
   let pinch: { dist: number; cam: Camera; mid: { x: number; y: number } } | null = null;
   let painting = false;
+  let secondary = false;
 
   const local = (e: PointerEvent | WheelEvent) => {
     const r = canvas.getBoundingClientRect();
@@ -167,7 +170,8 @@ export function attachCamera(opts: CameraOptions): CameraController {
       dragStart = { x: p.x, y: p.y, cam };
       moved = false;
       const primary = e.pointerType !== 'mouse' || e.button === 0;
-      if (primary && opts.paintMode?.()) {
+      secondary = e.pointerType === 'mouse' && e.button === 2;
+      if (primary && opts.paintMode?.(p.x, p.y, cam, e.pointerType)) {
         painting = true;
         opts.onPaint?.('start', p.x, p.y, cam);
       }
@@ -220,7 +224,11 @@ export function attachCamera(opts: CameraOptions): CameraController {
       if (painting) {
         painting = false;
         opts.onPaint?.(e.type === 'pointerup' ? 'end' : 'cancel', p.x, p.y, cam);
-      } else if (dragStart && !moved && e.type === 'pointerup') onTap(p.x, p.y, cam);
+      } else if (dragStart && !moved && e.type === 'pointerup') {
+        if (secondary) opts.onSecondaryTap?.(p.x, p.y, cam);
+        else onTap(p.x, p.y, cam);
+      }
+      secondary = false;
       dragStart = null;
     } else if (pointers.size === 1) {
       const [only] = [...pointers.values()];

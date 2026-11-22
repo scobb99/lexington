@@ -51,7 +51,7 @@ export class MapErrorBoundary extends Component<{ children: ReactNode }, Boundar
   }
 
   componentDidCatch(error: Error): void {
-    console.error('[WordCity] The map stopped working:', error);
+    console.error('[Lexington] The map stopped working:', error);
     mapFailed();
   }
 

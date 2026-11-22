@@ -1,4 +1,7 @@
-// Building layer (Build Spec v1.2, Sections 3 and 10).
+// Building layer (Build Spec v2.0, Sections 3, 10 and 13).
+// v2.0 polish (Section 13): every building is grounded with a soft ground tint and a contact
+// shadow under its footprint, drawn on one Graphics under the sprites, so buildings sit in the
+// terrain instead of floating on it. It redraws only when the buildings change.
 // The building art is the approved Gemini set, keyed to PNG with transparency by
 // scripts/art/process_art.py. Pixi loads each PNG once through Assets, and every building is
 // ONE Sprite (a 2 x 2 building is one sprite, never four tiles), anchored bottom-centre to its
@@ -6,7 +9,7 @@
 // Sprites are pooled by building id, sorted so buildings nearer the viewer draw on top, and
 // only change when the buildings in the store change.
 
-import { Assets, Container, Sprite, type Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import { BUILDINGS } from '../game/buildings';
 import { store } from '../game/store';
 import type { BuildingType } from '../game/types';
@@ -22,7 +25,7 @@ import parkUrl from '../assets/buildings/park.png?url';
 import greenhouseUrl from '../assets/buildings/greenhouse.png?url';
 import tavernUrl from '../assets/buildings/tavern.png?url';
 import wizardTowerUrl from '../assets/buildings/wizardtower.png?url';
-import { depthKey, footprintAnchor } from './camera';
+import { depthKey, footprintAnchor, footprintDiamond } from './camera';
 
 const ART: Record<BuildingType, string> = {
   cottage: cottageUrl,
@@ -71,7 +74,22 @@ export function spritePlacement(type: BuildingType, x: number, y: number, tex: T
   return { x: at.x, y: at.y, anchorX: info.anchorX, anchorY: info.anchorY, scale };
 }
 
+/** Section 13 grounding: a soft earthy tint and a contact shadow under one footprint. */
+function drawGrounding(g: Graphics, x: number, y: number, w: number, h: number): void {
+  const [top, right, bottom, left] = footprintDiamond(x, y, w, h);
+  const cx = (left.x + right.x) / 2;
+  const cy = (top.y + bottom.y) / 2;
+  const ring = (k: number, dy: number) => [top, right, bottom, left].flatMap((p) => [cx + (p.x - cx) * k, cy + (p.y - cy) * k + dy]);
+  // Ground tint: worn earth around the base, fading out over a few steps (soft, no filter).
+  for (const [k, a] of [[1.32, 0.05], [1.22, 0.07], [1.12, 0.09]] as const) g.beginFill(0x6b5a3a, a).drawPolygon(ring(k, 0)).endFill();
+  // Contact shadow: darker, nudged toward the viewer, tight under the footprint.
+  for (const [k, a] of [[1.06, 0.1], [0.96, 0.12], [0.84, 0.14]] as const) g.beginFill(0x1f2a1c, a).drawPolygon(ring(k, 3)).endFill();
+}
+
 export function createBuildingLayer(parent: Container, onError: (err: unknown) => void): BuildingLayer {
+  const grounding = new Graphics();
+  grounding.eventMode = 'none';
+  parent.addChild(grounding);
   const container = new Container();
   container.sortableChildren = true;
   parent.addChild(container);
@@ -82,6 +100,11 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
 
   const sync = () => {
     if (destroyed) return;
+    grounding.clear();
+    for (const b of store.state.buildings) {
+      const d = BUILDINGS[b.type];
+      if (b.type !== 'pier') drawGrounding(grounding, b.x, b.y, d.w, d.h);
+    }
     const live = new Set<number>();
     for (const b of store.state.buildings) {
       const tex = textures.get(b.type);
@@ -117,7 +140,7 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
     const entries = Object.entries(ART) as [BuildingType, string][];
     for (const [type, url] of entries) {
       const key = `building-${type}`;
-      if (!Assets.resolver.hasKey(key)) Assets.add(key, url);
+      if (!Assets.resolver.hasKey(key)) Assets.add({ alias: key, src: url }); // object form: no v7.2 deprecation warning
     }
     const loaded = (await Assets.load(entries.map(([type]) => `building-${type}`))) as Record<string, Texture>;
     for (const [type] of entries) {
@@ -154,6 +177,7 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
       sprites.clear();
       // Keep the textures: they live in the Assets cache and are reused if the map reloads.
       container.destroy({ children: true, texture: false, baseTexture: false });
+      grounding.destroy();
     },
   };
 }
