@@ -1,4 +1,4 @@
-// Town panel (Build Spec v1.7, Section 9): the current quest with its progress and reward,
+// Town panel (Build Spec v2.0, Sections 9 and 17): the current quest with its progress and reward,
 // and what the next tier needs. Quests are optional and never expire, so this panel only
 // informs; nothing here can be failed or missed.
 
@@ -32,12 +32,24 @@ function Checklist({ items }: { items: Requirement[] }) {
 export function TownPanel() {
   // These values change whenever progress can change, so the panel re-renders then.
   const questIndex = useGame((s) => s.questIndex);
+  const mode = useGame((s) => s.mode);
   const tier = useGame((s) => s.tier);
   useGame((s) => s.resources);
   useGame((s) => s.buildings);
   useGame((s) => s.roads);
   useGame((s) => s.lifetime);
 
+  // Section 17: quests do not run in the tutorial town, and it stays at Tier 1.
+  if (mode === 'tutorial') {
+    return (
+      <section className="town" aria-label="Town goals">
+        <div className="quest">
+          <h3>Tutorial town</h3>
+          <p className="quest-goal">Quests start in your own town, beginning with First Words. Nothing here is saved.</p>
+        </div>
+      </section>
+    );
+  }
   const quest = QUESTS[questIndex];
   const inputs = progressInputs();
   const nextTier = nextTierRequirements();

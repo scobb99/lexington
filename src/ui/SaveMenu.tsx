@@ -1,13 +1,15 @@
-// The Saves panel (Build Spec v1.8, Section 11): the autosave, three manual slots, Export and
-// Import of one JSON file, and New Game with a typed confirmation. Opened from the Saves
-// button (top bar on desktop, next to Build on the phone). Loading or importing replaces the
-// current town, so those ask once before doing it.
+// The Saves panel (Build Spec v2.0, Sections 11 and 16): the autosave, three manual slots,
+// Export and Import of one JSON file, and New Town. Opened from the in-game menu, or from the
+// title screen, where it shows Slots 1 to 3 with Load, Export and Import (loading a slot or
+// importing a file enters the town). Loading or importing replaces the current town, so in a
+// town those ask once before doing it.
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   MANUAL_SLOTS,
   SLOT_NAMES,
   checkImportFile,
+  exportSlot,
   exportTown,
   exportUnreadable,
   flushPendingAutosave,
@@ -16,57 +18,38 @@ import {
   importChecked,
   listSlots,
   loadFromSlot,
-  newGame,
   saveToSlot,
   subscribeSaveStatus,
   type SlotId,
   type SlotInfo,
 } from '../game/persistence';
-import type { SaveV1 } from '../game/save';
+import type { MigrationNotes, SaveData } from '../game/save';
+import { useGame } from '../game/store';
+import { setUi, useUi } from './uiState';
 
-// One Saves panel for the whole page; any Saves button opens it.
-let open = false;
-const openListeners = new Set<() => void>();
-function setOpen(v: boolean): void {
-  open = v;
-  openListeners.forEach((fn) => fn());
-}
 export function openSaves(): void {
-  setOpen(true);
-}
-const subscribeOpen = (fn: () => void) => {
-  openListeners.add(fn);
-  return () => openListeners.delete(fn);
-};
-
-export function SavesButton({ className = '' }: { className?: string }) {
-  return (
-    <button className={`pill saves-button ${className}`} onClick={openSaves} aria-haspopup="dialog">
-      Saves
-    </button>
-  );
+  setUi({ savesOpen: true });
 }
 
 type Confirm =
   | { kind: 'load'; id: SlotId }
   | { kind: 'replace'; id: SlotId }
-  | { kind: 'import'; save: SaveV1; fileName: string }
+  | { kind: 'import'; save: SaveData; notes: MigrationNotes; fileName: string }
   | null;
 
 type Note = { kind: 'ok' | 'warn'; text: string } | null;
 
-/** Section 11: New Game needs this word typed, because it deletes the autosave. */
-export const NEW_GAME_WORD = 'NEW';
+const close = () => setUi({ savesOpen: false });
 
 export function SaveDialog() {
-  const isOpen = useSyncExternalStore(subscribeOpen, () => open);
+  const isOpen = useUi((u) => u.savesOpen);
+  const mode = useGame((s) => s.mode);
+  const onTitle = mode === 'title';
   const status = useSyncExternalStore(subscribeSaveStatus, getSaveStatus);
   const [slots, setSlots] = useState<SlotInfo[] | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [note, setNote] = useState<Note>(null);
   const [busy, setBusy] = useState(false);
-  const [typed, setTyped] = useState('');
-  const [seed, setSeed] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -90,11 +73,9 @@ export function SaveDialog() {
     if (!isOpen) return;
     setConfirm(null);
     setNote(null);
-    setTyped('');
-    setSeed('');
     panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') close();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -123,7 +104,7 @@ export function SaveDialog() {
     run(async () => {
       setConfirm(null);
       const r = await loadFromSlot(id);
-      if (r.ok) setOpen(false);
+      if (r.ok) close();
       else setNote({ kind: 'warn', text: r.reason ?? 'That slot could not be loaded.' });
     });
 
@@ -135,27 +116,22 @@ export function SaveDialog() {
       const r = await checkImportFile(file);
       if (r.ok) {
         setNote(null);
-        setConfirm({ kind: 'import', save: r.save, fileName: file.name });
+        if (onTitle) {
+          await importChecked(r.save, file.name, r.notes);
+          close();
+        } else setConfirm({ kind: 'import', save: r.save, notes: r.notes, fileName: file.name });
       } else {
         setConfirm(null);
-        setNote({ kind: 'warn', text: `${file.name} was not loaded. ${r.reason} Your current town is unchanged.` });
+        setNote({ kind: 'warn', text: `${file.name} was not loaded. ${r.reason}${onTitle ? '' : ' Your current town is unchanged.'}` });
       }
     });
   };
 
-  const doImport = (save: SaveV1, fileName: string) =>
+  const doImport = (save: SaveData, notes: MigrationNotes, fileName: string) =>
     run(async () => {
       setConfirm(null);
-      await importChecked(save, fileName);
-      setOpen(false);
-    });
-
-  const typedOk = typed.trim().toUpperCase() === NEW_GAME_WORD;
-  const doNewGame = () =>
-    run(async () => {
-      if (!typedOk) return;
-      await newGame(seed);
-      setOpen(false);
+      await importChecked(save, fileName, notes);
+      close();
     });
 
   const autosave = slots?.find((s) => s.id === 'autosave');
@@ -168,19 +144,19 @@ export function SaveDialog() {
         }`;
 
   return (
-    <div className="dialog-backdrop" onPointerDown={(e: ReactPointerEvent<HTMLDivElement>) => e.target === e.currentTarget && setOpen(false)}>
+    <div className="dialog-backdrop" onPointerDown={(e: ReactPointerEvent<HTMLDivElement>) => e.target === e.currentTarget && close()}>
       <div className="dialog saves" role="dialog" aria-modal="true" aria-labelledby="saves-title" tabIndex={-1} ref={panelRef}>
         <div className="dialog-head">
           <h2 id="saves-title">Saves</h2>
-          <button className="pill" onClick={() => setOpen(false)}>
+          <button className="pill" onClick={close}>
             Close
           </button>
         </div>
 
-        <p className={`saves-status${!status.available || status.autosavePaused ? ' saves-status-warn' : ''}`}>{statusLine}</p>
+        {!onTitle && <p className={`saves-status${!status.available || status.autosavePaused ? ' saves-status-warn' : ''}`}>{statusLine}</p>}
 
         <ul className="slot-list">
-          {autosave && (
+          {autosave && !onTitle && (
             <li className="slot slot-auto">
               <div className="slot-info">
                 <span className="slot-name">Autosave</span>
@@ -219,16 +195,8 @@ export function SaveDialog() {
                 </div>
                 {asking ? (
                   <div className="slot-confirm">
-                    <span>
-                      {asking.kind === 'load'
-                        ? `Load ${SLOT_NAMES[id]}? Your current town will be replaced.`
-                        : `Replace what's in ${SLOT_NAMES[id]}?`}
-                    </span>
-                    <button
-                      className="pill pill-primary"
-                      disabled={busy}
-                      onClick={() => (asking.kind === 'load' ? doLoad(id) : doSave(id))}
-                    >
+                    <span>{asking.kind === 'load' ? `Load ${SLOT_NAMES[id]}? Your current town will be replaced.` : `Replace what's in ${SLOT_NAMES[id]}?`}</span>
+                    <button className="pill pill-primary" disabled={busy} onClick={() => (asking.kind === 'load' ? doLoad(id) : doSave(id))}>
                       {asking.kind === 'load' ? 'Yes, load it' : 'Yes, replace'}
                     </button>
                     <button className="pill" onClick={() => setConfirm(null)}>
@@ -237,16 +205,19 @@ export function SaveDialog() {
                   </div>
                 ) : (
                   <div className="slot-actions">
-                    <button
-                      className="pill"
-                      disabled={busy || !status.available}
-                      onClick={() => (filled ? setConfirm({ kind: 'replace', id }) : doSave(id))}
-                    >
-                      {filled ? 'Replace' : 'Save here'}
-                    </button>
-                    <button className="pill" disabled={busy || !filled} onClick={() => setConfirm({ kind: 'load', id })}>
+                    {!onTitle && (
+                      <button className="pill" disabled={busy || !status.available} onClick={() => (filled ? setConfirm({ kind: 'replace', id }) : doSave(id))}>
+                        {filled ? 'Replace' : 'Save here'}
+                      </button>
+                    )}
+                    <button className="pill" disabled={busy || !filled} onClick={() => (onTitle ? doLoad(id) : setConfirm({ kind: 'load', id }))}>
                       Load
                     </button>
+                    {onTitle && (
+                      <button className="pill" disabled={busy || !filled} onClick={() => void exportSlot(id)}>
+                        Export
+                      </button>
+                    )}
                   </div>
                 )}
               </li>
@@ -254,15 +225,19 @@ export function SaveDialog() {
           })}
         </ul>
 
-        {note && <p className={`saves-note saves-note-${note.kind}`} role="status">{note.text}</p>}
+        {note && (
+          <p className={`saves-note saves-note-${note.kind}`} role="status">
+            {note.text}
+          </p>
+        )}
 
         <section className="saves-file">
           <h3>Town file</h3>
-          <p>Export downloads your town as one file. Import loads a file like that back in.</p>
+          <p>{onTitle ? 'Import loads a town file and enters that town.' : 'Export downloads your town as one file. Import loads a file like that back in.'}</p>
           {confirm?.kind === 'import' ? (
             <div className="slot-confirm">
               <span>Load the town from {confirm.fileName}? Your current town will be replaced.</span>
-              <button className="pill pill-primary" disabled={busy} onClick={() => doImport(confirm.save, confirm.fileName)}>
+              <button className="pill pill-primary" disabled={busy} onClick={() => doImport(confirm.save, confirm.notes, confirm.fileName)}>
                 Yes, load it
               </button>
               <button className="pill" onClick={() => setConfirm(null)}>
@@ -271,9 +246,11 @@ export function SaveDialog() {
             </div>
           ) : (
             <div className="slot-actions">
-              <button className="pill" onClick={exportTown}>
-                Export
-              </button>
+              {!onTitle && (
+                <button className="pill" onClick={exportTown}>
+                  Export
+                </button>
+              )}
               <button className="pill" disabled={busy} onClick={() => fileRef.current?.click()}>
                 Import
               </button>
@@ -290,34 +267,17 @@ export function SaveDialog() {
           )}
         </section>
 
-        <section className="saves-new">
-          <h3>New town</h3>
-          <p>
-            Starts a fresh map. This deletes your autosave; Slots 1 to 3 are kept. Type <strong>{NEW_GAME_WORD}</strong> to confirm.
-          </p>
-          <div className="new-game-row">
-            <input
-              className="text-input"
-              value={typed}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setTyped(e.target.value)}
-              placeholder={`Type ${NEW_GAME_WORD}`}
-              aria-label={`Type ${NEW_GAME_WORD} to confirm a new town`}
-              autoComplete="off"
-              autoCapitalize="characters"
-            />
-            <input
-              className="text-input"
-              value={seed}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setSeed(e.target.value)}
-              placeholder="Map seed (optional)"
-              aria-label="Map seed (optional)"
-              autoComplete="off"
-            />
-            <button className="pill pill-danger" disabled={!typedOk || busy} onClick={doNewGame}>
-              Start new town
-            </button>
-          </div>
-        </section>
+        {!onTitle && (
+          <section className="saves-new">
+            <h3>New town</h3>
+            <p>Starts a fresh map. This deletes your autosave; Slots 1 to 3 are kept.</p>
+            <div className="slot-actions">
+              <button className="pill pill-danger" onClick={() => setUi({ savesOpen: false, newTownOpen: true })}>
+                New town…
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

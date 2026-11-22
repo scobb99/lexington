@@ -1,60 +1,34 @@
-// Top resource bar (Build Spec v1.7, Sections 3, 6, 8, 10).
+// Top resource bar (Build Spec v2.0, Sections 3, 6, 8, 10, 16).
 // Subscribes only to small interface values: resources, tier, buildings and roads (for the
 // derived population and happiness). Tapping Happiness shows how the score is made up.
 // On a phone this becomes the compact top bar. Resource icons are simple flat shapes in the map palette,
 // bright enough to read on the dark panels.
 
-import { SavesButton } from './SaveMenu';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { NAME } from '../game/config';
 import { currentHappiness, currentHappinessBreakdown, useGame } from '../game/store';
+import { MenuButton } from './Menu';
+import iconCoin from '../assets/ui/icon-coin.png?url';
+import iconLumber from '../assets/ui/icon-lumber.png?url';
+import iconStone from '../assets/ui/icon-stone.png?url';
+import iconKnowledge from '../assets/ui/icon-knowledge.png?url';
+import iconMagic from '../assets/ui/icon-magic.png?url';
+import { setUi, useUi } from './uiState';
 import { population } from '../game/buildings';
 import { RESOURCE_KEYS, RESOURCE_LABELS, type ResourceKey } from '../game/types';
 import { happinessMultiplier } from '../game/words';
 
+/** Section 3 UI art: the Gemini resource icons (coin, lumber, stone, knowledge book, magic sparkle). */
+const ICONS: Record<ResourceKey, string> = {
+  coins: iconCoin,
+  lumber: iconLumber,
+  stone: iconStone,
+  knowledge: iconKnowledge,
+  magic: iconMagic,
+};
+
 export function ResourceIcon({ kind, size = 20 }: { kind: ResourceKey; size?: number }) {
-  const common = { width: size, height: size, viewBox: '0 0 24 24', 'aria-hidden': true } as const;
-  switch (kind) {
-    case 'coins':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" fill="#f2c94c" />
-          <circle cx="12" cy="12" r="6" fill="none" stroke="#c9952b" strokeWidth="1.6" />
-          <circle cx="9.5" cy="9" r="1.6" fill="#fff3c4" />
-        </svg>
-      );
-    case 'lumber':
-      return (
-        <svg {...common}>
-          <rect x="3" y="8" width="16" height="9" rx="4.5" fill="#b07a45" />
-          <ellipse cx="18.5" cy="12.5" rx="3.2" ry="4.5" fill="#e3b680" />
-          <ellipse cx="18.5" cy="12.5" rx="1.6" ry="2.4" fill="none" stroke="#b07a45" strokeWidth="1" />
-          <path d="M6 11h7M5 14h9" stroke="#8f5f33" strokeWidth="1.2" strokeLinecap="round" />
-        </svg>
-      );
-    case 'stone':
-      return (
-        <svg {...common}>
-          <path d="M4 15l3-7 7-2 6 5-1 7-9 2z" fill="#c9c6bd" />
-          <path d="M7 8l7-2 3 3-6 2z" fill="#e6e3da" />
-          <path d="M10 20l1-6 8-3" fill="none" stroke="#9e9a90" strokeWidth="1.2" />
-        </svg>
-      );
-    case 'knowledge':
-      return (
-        <svg {...common}>
-          <path d="M3 6c3-1 6-1 9 1v12c-3-2-6-2-9-1z" fill="#6fb3d9" />
-          <path d="M21 6c-3-1-6-1-9 1v12c3-2 6-2 9-1z" fill="#8cc6e6" />
-          <path d="M5 9c2-.5 3.5-.3 5 .5M5 12c2-.5 3.5-.3 5 .5M14 9.5c1.5-.8 3-1 5-.5" stroke="#f4ead5" strokeWidth="1" fill="none" />
-        </svg>
-      );
-    case 'magic':
-      return (
-        <svg {...common}>
-          <path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z" fill="#b79cf0" />
-          <circle cx="10" cy="9.5" r="1.4" fill="#efe6ff" />
-        </svg>
-      );
-  }
+  return <img className="resource-icon" src={ICONS[kind]} width={size} height={size} alt="" aria-hidden draggable={false} />;
 }
 
 /** Short form for the phone's compact top bar: 980, 9.8k, 12k. */
@@ -80,22 +54,23 @@ export function Hud() {
   const pop = population(buildings);
   const happy = currentHappiness();
   const mult = happinessMultiplier(happy);
-  const [showHappy, setShowHappy] = useState(false);
+  const showHappy = useUi((u) => u.happyOpen);
+  const mode = useGame((s) => s.mode);
   const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!showHappy) return;
+    if (!showHappy || mode === 'tutorial') return;
     const close = (e: PointerEvent) => {
-      if (popRef.current && !popRef.current.contains(e.target as Node)) setShowHappy(false);
+      if (popRef.current && !popRef.current.contains(e.target as Node)) setUi({ happyOpen: false });
     };
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
-  }, [showHappy]);
+  }, [showHappy, mode]);
 
   return (
     <header className="hud panel">
-      <h1 className="brand">WordCity</h1>
-      <ul className="resources" aria-label="Resources">
+      <h1 className="brand">{NAME}</h1>
+      <ul className="resources" aria-label="Resources" data-tour="hud-resources">
         {RESOURCE_KEYS.map((k) => (
           <li key={k} className="resource" title={RESOURCE_LABELS[k]}>
             <ResourceIcon kind={k} />
@@ -115,7 +90,8 @@ export function Hud() {
         <li className="happy-wrap">
           <button
             className="happy-chip"
-            onClick={() => setShowHappy((v) => !v)}
+            data-tour="happiness"
+            onClick={() => setUi({ happyOpen: !showHappy })}
             aria-expanded={showHappy}
             title={`Happiness ${happy}: word rewards x${mult.toFixed(1)}. Tap for details.`}
           >
@@ -147,7 +123,7 @@ export function Hud() {
           )}
         </li>
       </ul>
-      <SavesButton className="hud-saves" />
+      {mode === 'town' && <MenuButton className="hud-menu" />}
     </header>
   );
 }

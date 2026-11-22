@@ -1,4 +1,4 @@
-// Message line and notices (Build Spec v1.1, Section 12).
+// Message line and notices (Build Spec v2.0, Section 12).
 // Every action gives a short, friendly message naming the specific reason.
 
 import { useState } from 'react';
@@ -30,7 +30,7 @@ export function Messages() {
   const dictCount = useGame((s) => s.dict.count);
 
   return (
-    <div className="messages">
+    <div className="messages" data-tour="message">
       <MessageLine key={message.id} message={message} />
       {notice && (
         <p className="notice" role="alert">

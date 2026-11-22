@@ -1,52 +1,40 @@
-// Build panel (Build Spec v1.5, Sections 4, 6, 7, 12).
-// Tools for roads, bridges, clearing forest and removal, and the building catalog with exact
-// costs. A building the player cannot afford shows which costs are short. Removing a building
-// asks for one confirmation that shows the exact refund (Section 7).
+// Build panel (Build Spec v2.0, Sections 4, 6, 7, 12).
+// Tools for roads, bridges, clearing (forest and thicket), draining marsh (from Tier 2) and
+// removal, and the building cards with the Section 7 text: a header line, a cost line, a does
+// line and a goes line. A locked card says which tier opens it; a card the player cannot afford
+// names every missing resource. Selecting an unaffordable card still starts placement, so the
+// ghost can teach placement; a locked card does not.
 
-import { SavesButton } from './SaveMenu';
-import { useEffect, useState } from 'react';
-import { BUILDINGS, TIER_ORDER } from '../game/buildings';
-import { cancelRemoval, confirmRemoval, setTool, useGame } from '../game/store';
-import { RESOURCE_KEYS, RESOURCE_LABELS, type BuildingType, type Tool } from '../game/types';
+import { useEffect } from 'react';
+import { BUILDINGS, CARD_NOTES, CARD_TEXT, TIER_ORDER, anyMissing, lockedLine, missingResources, notEnoughLine } from '../game/buildings';
+import { DRAIN_TIER, cancelRemoval, confirmRemoval, setTool, toolChipText, useGame } from '../game/store';
+import type { BuildingType, Tool } from '../game/types';
 import { formatResources } from '../game/words';
-import { ResourceIcon } from './Hud';
+import { MenuButton } from './Menu';
 import { TownPanel } from './TownPanel';
+import { isPhone, setUi, useUi } from './uiState';
 
-/** Section 10 phone layout: narrow screens (under 768 px) use the bottom-sheet arrangement. */
-export const PHONE_QUERY = '(max-width: 767px)';
-const isPhone = () => typeof window !== 'undefined' && window.matchMedia?.(PHONE_QUERY).matches;
-
-const TOOL_NAMES: Partial<Record<Tool, string>> = { road: 'Road', bridge: 'Bridge', clear: 'Clear forest', remove: 'Remove' };
+const TOOL_NAMES: Partial<Record<Tool, string>> = { road: 'Road', bridge: 'Bridge', clear: 'Clear', drain: 'Drain', remove: 'Remove' };
 
 const TOOLS: { tool: Tool; label: string; note: string }[] = [
-  { tool: 'inspect', label: 'Look', note: 'Click the map to see what is there' },
-  { tool: 'road', label: 'Road', note: '1 Coin per tile. Drag to draw a road.' },
-  { tool: 'bridge', label: 'Bridge', note: '3 Coins and 2 Lumber per tile. Drag across water.' },
-  { tool: 'clear', label: 'Clear forest', note: '2 Coins per tile. Opens forest for roads and buildings. Drag to clear.' },
+  { tool: 'inspect', label: 'Look', note: 'Click the map to see what is there.' },
+  { tool: 'road', label: 'Road', note: '1 Coin per tile. Drag to draw; nothing is charged until you tap Confirm.' },
+  { tool: 'bridge', label: 'Bridge', note: '3 Coins and 2 Lumber per tile, over water or marsh. Confirm to build.' },
+  { tool: 'clear', label: 'Clear', note: 'Forest: 2 Coins a tile. Thicket: 6 Coins and 3 Lumber a tile.' },
+  { tool: 'drain', label: 'Drain', note: 'Marsh: 5 Coins and 2 Lumber a tile. It becomes meadow. Opens at Tier 2.' },
   { tool: 'remove', label: 'Remove', note: 'Roads and bridges: free, no refund. Buildings: half refund.' },
 ];
 
 const HINTS: Partial<Record<Tool, string>> = {
   inspect: 'Drag to look around. Scroll or pinch to zoom.',
-  road: 'Drag across land to draw a road. Right-drag or two fingers to pan.',
-  bridge: 'Drag across the river to build a bridge.',
-  clear: 'Drag over forest to clear it (2 Coins per tile). Thicket cannot be cleared.',
+  road: 'Drag across land to draw a road, then tap Confirm. Right-drag or two fingers to pan.',
+  bridge: 'Drag across water or marsh to draw a bridge, then tap Confirm.',
   remove: 'Click a road, bridge, or building to remove it.',
 };
 
-const PRODUCES: Partial<Record<BuildingType, string>> = {
-  cottage: 'Houses 3',
-  sawmill: '+2 Lumber per word',
-  quarry: '+2 Stone per word',
-  market: '+2 Coins per word',
-  library: '+1 Knowledge per word',
-  pier: '+1 Coin, +1 Lumber per word',
-  park: 'Happiness +5',
-  greenhouse: '+1 Lumber, +1 Knowledge per word',
-  tavern: '+1 Coin per word',
-  townHall: 'Happiness +10',
-  wizardTower: '+1 Magic per 5 words; doubles rare-letter Magic',
-};
+function toolLabel(tool: Tool): string | undefined {
+  return tool in BUILDINGS ? BUILDINGS[tool as BuildingType].name : TOOL_NAMES[tool];
+}
 
 /**
  * The side column on desktop. On a phone it becomes a bottom sheet opened with the Build
@@ -54,39 +42,43 @@ const PRODUCES: Partial<Record<BuildingType, string>> = {
  * shows the active tool with a Done button.
  */
 export function SidePanel() {
-  const [open, setOpen] = useState(false);
+  const open = useUi((u) => u.sheetOpen);
   const tool = useGame((s) => s.tool);
   const pending = useGame((s) => s.pendingRemoval);
+  const mode = useGame((s) => s.mode);
+  useGame((s) => s.toolTile);
+  useGame((s) => s.resources);
 
   useEffect(() => {
-    if (tool !== 'inspect' && isPhone()) setOpen(false);
+    if (tool !== 'inspect' && isPhone()) setUi({ sheetOpen: false });
   }, [tool]);
   useEffect(() => {
-    if (pending && isPhone()) setOpen(true);
+    if (pending && isPhone()) setUi({ sheetOpen: true });
   }, [pending]);
 
-  const toolName = tool in BUILDINGS ? BUILDINGS[tool as BuildingType].name : TOOL_NAMES[tool];
+  const name = toolLabel(tool);
+  const chip = toolChipText();
 
   return (
     <>
       <aside className={`side${open ? ' sheet-open' : ''}`} aria-label="Town and build">
-        <button className="sheet-close pill" onClick={() => setOpen(false)} aria-label="Close">
+        <button className="sheet-close pill" onClick={() => setUi({ sheetOpen: false })} aria-label="Close">
           Close
         </button>
         <TownPanel />
         <BuildPanel />
       </aside>
       <div className="phone-actions">
-        {toolName && !open && (
+        {name && !open && (
           <div className="tool-chip" role="status">
-            <span>Using {toolName}</span>
+            <span>{chip ?? `Using ${name}`}</span>
             <button className="pill" onClick={() => setTool('inspect')}>
               Done
             </button>
           </div>
         )}
-        {!open && <SavesButton className="phone-saves" />}
-        <button className="pill pill-primary sheet-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {!open && mode === 'town' && <MenuButton className="phone-menu" />}
+        <button className="pill pill-primary sheet-toggle" onClick={() => setUi({ sheetOpen: !open })} aria-expanded={open}>
           {open ? 'Close' : 'Build'}
         </button>
       </div>
@@ -99,36 +91,36 @@ export function BuildPanel() {
   const tier = useGame((s) => s.tier);
   const resources = useGame((s) => s.resources);
   const pending = useGame((s) => s.pendingRemoval);
+  const locks = useGame((s) => s.locks);
+  const previewing = useGame((s) => !!s.preview);
+  useGame((s) => s.toolTile);
 
-  // Escape puts the tools down (and cancels a pending removal).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      cancelRemoval();
-      setTool('inspect');
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const hint = tool in BUILDINGS ? `Click the map to place the ${BUILDINGS[tool as BuildingType].name}. Esc to stop.` : HINTS[tool];
+  const allowed = (t: Tool) => t === 'inspect' || locks.tools === 'all' || locks.tools.includes(t);
+  const chip = toolChipText();
+  const hint = tool in BUILDINGS ? `Move the ${BUILDINGS[tool as BuildingType].name} over the map, then click to pin it and confirm. Esc to stop.` : chip ?? HINTS[tool];
 
   return (
     <section className="build" aria-label="Build">
       <h2>Build</h2>
       <div className="tool-row">
-        {TOOLS.map((t) => (
-          <button
-            key={t.tool}
-            className={`pill${tool === t.tool ? ' pill-selected' : ''}`}
-            onClick={() => setTool(tool === t.tool && t.tool !== 'inspect' ? 'inspect' : t.tool)}
-            title={t.note}
-            aria-pressed={tool === t.tool}
-          >
-            {t.label}
-          </button>
-        ))}
+        {TOOLS.map((t) => {
+          const drainLocked = t.tool === 'drain' && tier < DRAIN_TIER;
+          return (
+            <button
+              key={t.tool}
+              className={`pill${tool === t.tool ? ' pill-selected' : ''}`}
+              onClick={() => setTool(tool === t.tool && t.tool !== 'inspect' ? 'inspect' : t.tool)}
+              title={t.note}
+              aria-pressed={tool === t.tool}
+              disabled={drainLocked || !allowed(t.tool) || (previewing && tool !== t.tool)}
+              data-tour={t.tool === 'road' ? 'road-tool' : undefined}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
+      {tier < DRAIN_TIER && <p className="tool-locked">Drain: Opens at Tier 2.</p>}
       {hint && <p className="tool-hint">{hint}</p>}
 
       {pending && (
@@ -155,42 +147,50 @@ export function BuildPanel() {
       <ul className="catalog">
         {TIER_ORDER.map((type) => {
           const def = BUILDINGS[type];
+          const card = CARD_TEXT[type];
           const locked = def.tier > tier;
+          const missing = missingResources(resources, def.cost);
+          const short = anyMissing(missing);
           const selected = tool === type;
+          // Section 7: when both apply, the locked line shows.
+          const stateLine = locked ? lockedLine(def.tier) : short ? notEnoughLine(missing) : null;
           return (
             <li key={type}>
               <button
-                className={`catalog-item${selected ? ' catalog-selected' : ''}`}
-                disabled={locked}
-                onClick={() => setTool(selected ? 'inspect' : type)}
+                className={`catalog-item${selected ? ' catalog-selected' : ''}${locked ? ' catalog-locked' : ''}${short && !locked ? ' catalog-short' : ''}`}
+                aria-disabled={locked}
+                disabled={!allowed(type) || (previewing && !selected)}
+                onClick={() => (locked ? setTool(type) : setTool(selected ? 'inspect' : type))}
                 aria-pressed={selected}
-                title={locked ? `Unlocks at Tier ${def.tier}` : `Place a ${def.name}`}
+                data-tour={type === 'cottage' ? 'cottage-card' : type === 'sawmill' ? 'sawmill-card' : undefined}
               >
-                <span className="catalog-head">
-                  <span className="catalog-name">{def.name}</span>
-                  <span className="catalog-size">{locked ? `Tier ${def.tier}` : `${def.w}×${def.h}`}</span>
-                </span>
-                <span className="cost">
-                  {RESOURCE_KEYS.filter((k) => def.cost[k] > 0).map((k) => {
-                    const short = !locked && resources[k] < def.cost[k];
-                    return (
-                      <span
-                        key={k}
-                        className={`cost-chip${short ? ' cost-short' : ''}`}
-                        title={short ? `${def.cost[k] - resources[k]} more ${RESOURCE_LABELS[k]} needed` : RESOURCE_LABELS[k]}
-                      >
-                        <ResourceIcon kind={k} size={14} />
-                        {def.cost[k]}
-                      </span>
-                    );
-                  })}
-                </span>
-                {!locked && PRODUCES[type] && <span className="catalog-note">{PRODUCES[type]}</span>}
+                <span className="card-header">{card.header}</span>
+                <span className="card-cost">{card.cost}</span>
+                {stateLine ? <span className={`card-state${locked ? ' card-locked' : ' card-short'}`}>{stateLine}</span> : <span className="card-does">{card.does}</span>}
+                <span className="card-goes">{card.goes}</span>
               </button>
             </li>
           );
         })}
       </ul>
+      <div className="card-notes">
+        {CARD_NOTES.map((n) => (
+          <p key={n}>{n}</p>
+        ))}
+      </div>
     </section>
+  );
+}
+
+/** A copy of one card, for the tutorial caption on the phone (Section 17 step 7). */
+export function CardCopy({ type }: { type: BuildingType }) {
+  const card = CARD_TEXT[type];
+  return (
+    <div className="catalog-item card-copy">
+      <span className="card-header">{card.header}</span>
+      <span className="card-cost">{card.cost}</span>
+      <span className="card-does">{card.does}</span>
+      <span className="card-goes">{card.goes}</span>
+    </div>
   );
 }
