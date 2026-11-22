@@ -154,9 +154,12 @@ npm run typecheck  # TypeScript check (not part of the Vercel build)
 - **Saves:**
   - format version 2: `src/game/save.ts`, with `MIGRATIONS[1]` turning v1 marsh roads into bridges;
   - IndexedDB and the tutorial flag: `src/game/persistence.ts`.
-- **Terrain polish (Section 13):** `src/pixi/terrainClusters.ts` (patches, depth, peaks) and `src/pixi/terrainBake.ts`.
-  - The future Gemini pieces already have slots in `POLISH_ART` in `src/pixi/terrainVariants.ts`.
-  - To add one, put `polish-<id>.jpg` with the other JPGs and run `python3 -I scripts/art/process_art.py <folder of JPGs> src/assets`. No code changes.
+- **Terrain polish and blending (Section 13, with the Nov 22, 2026 blending addendum):**
+  - `src/pixi/terrainClusters.ts`: patches, depth, and where the mountain peaks stand.
+  - `src/pixi/terrainBake.ts`: the one-texture bake, including the soft boundaries between terrains, the marsh and water banks, the peaks, canopies and large trees.
+  - `src/pixi/buildingLayer.ts`: the ground tint and contact shadow under every building.
+  - The six Gemini polish pieces are wired in (slots in `POLISH_ART` in `src/pixi/terrainVariants.ts`). Their source names map to slots in `POLISH_FILES` in `scripts/art/process_art.py`, so `terrain-peak.jpg`, `terrain-canopy-1.jpg` and the rest can sit with the other JPGs.
+  - To replace or add a piece, put the JPG with the other JPGs and run `python3 -I scripts/art/process_art.py <folder of JPGs> src/assets`. No code changes.
 - **UI art:** `scripts/art/process_ui.py` keys the game icon, letter tiles and resource icons into `src/assets/ui/`.
 - **Boone's scripts:** `scripts/boone/economy_sim.py` and `scripts/boone/find_tutorial_seed.mjs`. To run the simulation from the repository root:
 
