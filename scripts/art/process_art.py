@@ -22,12 +22,12 @@ Tiling the slabs directly would show a grid of soil edges, which Section 3 forbi
   * terrain.json: per-variant anchors and sizes, plus per-type colours (ground, bank, soil).
   The game's variant manifest (src/pixi/terrainVariants.ts) decides where each variant goes.
 
-Terrain polish pieces (Section 13, v2.0), when Gemini delivers them, named polish-<id>.jpg:
-  polish-hill-peak.jpg, polish-forest-canopy-1.jpg, polish-forest-canopy-2.jpg,
-  polish-tree-large-1.jpg -> props-<id>.png (keyed, trimmed, 4 px per game pixel)
-  polish-edge-marsh-1.jpg, polish-edge-water-1.jpg -> splat-<id>.png (keyed, soft edge)
-  Their slots already exist in POLISH_ART (src/pixi/terrainVariants.ts), so the game uses them
-  on the next build with no code changes.
+Terrain polish pieces (Section 13, v2.0), under their Gemini names or as polish-<slot>.jpg:
+  terrain-peak.jpg -> props-hill-peak.png         terrain-tree-large.jpg -> props-tree-large-1.png
+  terrain-canopy-1.jpg -> props-forest-canopy-1.png  terrain-canopy-2.jpg -> props-forest-canopy-2.png
+  terrain-edge-marsh.jpg -> splat-edge-marsh-1.png   terrain-edge-water.jpg -> splat-edge-water-1.png
+  Props are keyed and trimmed, with their ground anchor measured; the edge slabs are cut down to
+  a feathered blob of their top face. Anchors and sizes go into terrain.json ("polish").
 """
 import json
 import os
@@ -194,6 +194,8 @@ files = sorted(f for f in os.listdir(SRC) if re.fullmatch(r'terrain-[a-z]+(-\d+)
 jobs = []
 for f in files:
     m = re.fullmatch(r'terrain-([a-z]+)(?:-(\d+))?\.jpg', f)
+    if m.group(1) not in SPLAT | PROPS:
+        continue  # e.g. terrain-peak.jpg, a Section 13 polish piece (handled below)
     jobs.append((m.group(1), int(m.group(2) or 1), f[:-4]))
 jobs.sort(key=lambda j: (j[0], j[1]))  # variant 1 of each type first: it supplies the type's colours
 
@@ -346,20 +348,123 @@ with open(os.path.join(TERRAIN_OUT, 'terrain.json'), 'w') as f:
     json.dump(terrain_meta, f, indent=2)
 
 # ---------------------------------------------------------------- Section 13 polish pieces
-# Width in game tiles for each piece (matches POLISH_ART "tiles" in terrainVariants.ts).
-POLISH_TILES = {'hill-peak': 2.6, 'forest-canopy-1': 1.9, 'forest-canopy-2': 1.9, 'tree-large-1': 1.2,
-                'edge-marsh-1': 1.6, 'edge-water-1': 1.6}
+# The Gemini file names (as delivered to the WordCity Drive folder) and the slot each fills.
+POLISH_FILES = {
+    'terrain-peak': 'hill-peak',
+    'terrain-tree-large': 'tree-large-1',
+    'terrain-canopy-1': 'forest-canopy-1',
+    'terrain-canopy-2': 'forest-canopy-2',
+    'terrain-edge-marsh': 'edge-marsh-1',
+    'terrain-edge-water': 'edge-water-1',
+}
+terrain_meta['polish'] = {}
+
+
+def polish_props(pid, rgb):
+    """Peak, tree, canopy: keyed and trimmed. The anchor is where the piece meets the ground:
+    the base face centre for the peak (the midpoint of its left and right corners), and the
+    light ground patch under the trunks for the tree and the canopies."""
+    # Trees: white showing through gaps between branches is background too (as for the Market).
+    rgba, _ = key_white(rgb, holes=pid != 'hill-peak')
+    if pid == 'hill-peak':
+        # The summit's light grey outline would key as a soft edge and leave a see-through halo
+        # round the snow: fill the whole silhouette as solid paint (as the hill mounds are).
+        sil = ndi.binary_fill_holes(ndi.binary_closing(rgba[..., 3] > 30, iterations=3))
+        sil = ndi.binary_erosion(sil, iterations=2)
+        rgba[..., :3] = np.where(sil[..., None], rgb, rgba[..., :3])
+        rgba[..., 3] = ndi.gaussian_filter(sil.astype(np.float32), 1.0) * 255.0
+    a = rgba[..., 3]
+    solid = a > 128
+    ys, xs = np.nonzero(solid)
+    x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+    if pid == 'hill-peak':
+        L, R = xs.min(), xs.max()
+        lc, rc = ys[xs <= L + 4], ys[xs >= R - 4]
+        ax, ay = (L + R) / 2.0, (lc.min() + rc.min()) / 2.0
+        base_w = float(R - L)  # the base face's width: the footprint the peak covers
+    else:
+        r_, g_, b_ = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        ground = solid & (g_ > r_ + 6) & (rgb.min(axis=2) > 105)
+        # Only the bottom of the piece: below the leaves (the single tree's crown hangs lower).
+        ground[: y0 + int((y1 - y0) * (0.78 if pid.startswith('tree-') else 0.6))] = False
+        gy, gx = np.nonzero(ground)
+        # An isometric ground patch's centre lies on the line between its left and right
+        # corners (the back of the patch is hidden behind the trees, so its middle can't be used).
+        gl, gr = gx.min(), gx.max()
+        ax = (gl + gr) / 2.0
+        ay = (gy[gx <= gl + 0.03 * (gr - gl)].mean() + gy[gx >= gr - 0.03 * (gr - gl)].mean()) / 2.0
+        base_w = float(gr - gl)
+    img = to_image(rgba[y0:y1, x0:x1])
+    want = POLISH_BASE_W.get(pid, POLISH_DENSITY_W)
+    scale = want / base_w  # the ground part becomes `want` px wide
+    img = resize_rgba(img, (max(1, round(img.width * scale)), max(1, round(img.height * scale))))
+    return img, {'anchorX': round((ax - x0) / (x1 - x0), 5), 'anchorY': round((ay - y0) / (y1 - y0), 5),
+                 'baseWidth': want}
+
+
+def polish_edge(pid, rgb):
+    """Edge pieces arrive as full slabs (top face plus soil and water sides). Keep the top face
+    only, as a soft blob: an ellipse centred on the face centre (the midpoint of the slab's left
+    and right corners, true for any parallelogram), feathered wide so the side faces and the
+    hard outline fade out. The land side stays at the lower left, as Gemini drew it."""
+    rgba, _ = key_white(rgb)
+    solid = rgba[..., 3] > 128
+    ys, xs = np.nonzero(solid)
+    L, R = xs.min(), xs.max()
+    lc, rc = ys[xs <= L + 4], ys[xs >= R - 4]
+    cx, cy = (L + R) / 2.0, (lc.min() + rc.min()) / 2.0
+    rx = 0.34 * (R - L)
+    ry = rx * TILE_H / TILE_W
+    H, W = solid.shape
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    r = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    alpha = smoothstep(1.0, 0.35, r) * (rgba[..., 3] / 255.0)
+    col = rgb.copy()
+    if pid == 'edge-marsh-1':
+        # The piece's pond is a deep navy; the approved marsh tiles have pale teal pools. Colour-
+        # match the pond pixels only (reeds and grass untouched) to the marsh tile's pool colour,
+        # so the piece blends into the baked marsh instead of reading as a dark smudge.
+        pool = np.array([int(terrain_meta['types']['marsh']['groundColor'][i:i + 2], 16) for i in (1, 3, 5)], np.float32)
+        r_, g_, b_ = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        water = (b_ > r_ + 12) & (b_ >= g_ - 6) & (rgb.max(axis=2) < 170)
+        w = ndi.gaussian_filter(water.astype(np.float32), 2.0)[..., None]
+        lum = rgb.mean(axis=2, keepdims=True)
+        shaded = pool[None, None, :] * (0.78 + 0.5 * (lum / max(1.0, float(lum[water].mean())) - 1.0))
+        col = rgb * (1 - 0.8 * w) + np.clip(shaded, 0, 255) * (0.8 * w)
+    out = np.dstack([col, alpha * 255.0])
+    sy0, sy1 = int(cy - ry), int(cy + ry) + 1
+    sx0, sx1 = int(cx - rx), int(cx + rx) + 1
+    img = to_image(out[max(0, sy0):sy1, max(0, sx0):sx1])
+    want = POLISH_BASE_W.get(pid, POLISH_DENSITY_W)
+    img = resize_rgba(img, (want, round(want * img.height / img.width)))
+    return img, {'anchorX': 0.5, 'anchorY': 0.5, 'baseWidth': want}
+
+
+# Polish art is stored with its ground part this many pixels wide: twice the widest the bake
+# ever draws it (the same 2x density as the terrain tiles), so the bake only ever shrinks it a
+# little and nothing shimmers without mipmaps. Widest draws, in tiles of 64 px: peak 4.6,
+# canopy 1.85 x 1.1, large tree 0.8 x 1.1 x 1.2, edge pieces 1.5 x 1.2 (terrainBake.ts).
+POLISH_BASE_W = {'hill-peak': 600, 'forest-canopy-1': 288, 'forest-canopy-2': 288, 'tree-large-1': 176,
+                 'edge-marsh-1': 256, 'edge-water-1': 256}
+POLISH_DENSITY_W = 256  # any other polish piece
 for f in sorted(os.listdir(SRC)):
+    stem = f[:-4]
     m = re.fullmatch(r'polish-([a-z0-9-]+)\.jpg', f)
-    if not m:
+    pid = m.group(1) if m else POLISH_FILES.get(stem) if f.endswith('.jpg') else None
+    if not pid:
         continue
-    pid = m.group(1)
-    rgba, _ = key_white(load(f[:-4]))
-    vy, vx = np.nonzero(rgba[..., 3] > 3)
-    img = to_image(rgba[vy.min():vy.max() + 1, vx.min():vx.max() + 1])
-    out_w = round(TILE_W * POLISH_TILES.get(pid, 1.5) * TEXTURE_DENSITY)
-    img = resize_rgba(img, (out_w, round(out_w * img.height / img.width)))
-    name = ('splat-' if pid.startswith('edge-') else 'props-') + pid + '.png'
+    rgb = load(stem)
+    if pid.startswith('edge-'):
+        img, meta = polish_edge(pid, rgb)
+        name = f'splat-{pid}.png'
+    else:
+        img, meta = polish_props(pid, rgb)
+        name = f'props-{pid}.png'
     img.save(os.path.join(TERRAIN_OUT, name), optimize=True)
-    print(f'polish {pid:16s} -> {name}')
+    meta.update({'file': name, 'width': img.width, 'height': img.height})
+    terrain_meta['polish'][pid] = meta
+    print(f'polish {pid:16s} -> {name} {img.width}x{img.height} anchor {meta["anchorX"]:.3f},{meta["anchorY"]:.3f}')
+
+with open(os.path.join(TERRAIN_OUT, 'terrain.json'), 'w') as f:
+    json.dump(terrain_meta, f, indent=2)
 print('done')
