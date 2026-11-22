@@ -349,6 +349,14 @@ export const hooks: {
   onPathConfirmed?: (kind: 'road' | 'bridge', tiles: Pt[]) => void;
   onBuilt?: (b: Building) => void;
   onToolChange?: (tool: Tool) => void;
+  /**
+   * Tutorial build steps only: a reason a building may not go at this footprint origin (the
+   * marked plot), checked after the normal Section 7 reasons. Null when the spot is fine.
+   */
+  placementGuard?: (type: BuildingType, x: number, y: number) => string | null;
+  /** Tutorial build steps only: a reason Remove may not act on this tile. Null when it may. */
+  removeGuard?: (x: number, y: number, b: Building | undefined) => string | null;
+  onRemoved?: (b: Building) => void;
 } = {};
 
 // ---------- derived values (never stored, Section 8) ----------
@@ -1412,6 +1420,8 @@ export function ghostCheck(type: BuildingType, x: number, y: number): { ok: bool
   const def = BUILDINGS[type];
   const problem = placementProblem(placementContext(), type, x, y);
   if (problem) return { ok: false, line: placementReason(problem, type) };
+  const guard = hooks.placementGuard?.(type, x, y);
+  if (guard) return { ok: false, line: guard };
   const missing = missingFor(def.cost);
   if (missing) return { ok: false, line: notEnoughLine(missing) };
   return { ok: true, line: `${def.name}: ${costList(def.cost)}.` };
@@ -1507,6 +1517,11 @@ export function requestRemoveAt(x: number, y: number): void {
   const s = store.state;
   if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return;
   const b = buildingAt(s.buildings, x, y);
+  const guard = hooks.removeGuard?.(x, y, b);
+  if (guard) {
+    say(guard, 'info');
+    return;
+  }
   if (b) {
     if (b.preview) {
       say('That building is part of the art showcase and cannot be removed.', 'info');
@@ -1544,6 +1559,7 @@ export function confirmRemoval(): void {
     store.emit('meta');
     return;
   }
+  const removed = s.buildings.find((b) => b.id === p.buildingId)!;
   s.buildings = s.buildings.filter((b) => b.id !== p.buildingId);
   const next = { ...s.resources };
   for (const k of Object.keys(next) as (keyof Resources)[]) next[k] += p.refund[k];
@@ -1552,6 +1568,7 @@ export function confirmRemoval(): void {
   say(`${BUILDINGS[p.type].name} removed.${back ? ' Refunded ' + back + '.' : ''}`, 'info');
   store.emit('buildings', 'resources', 'meta');
   announceProgress(); // removing a noisy Sawmill can raise happiness
+  hooks.onRemoved?.(removed);
 }
 
 export function cancelRemoval(): void {
