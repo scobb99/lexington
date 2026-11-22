@@ -6,7 +6,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { goToTitle } from '../game/session';
-import { FRAMES, STEP6_RETRY } from '../game/tutorial';
+import { FRAMES, OFF_PLOT_CAPTION, STEP6_RETRY } from '../game/tutorial';
 import { backToTown, endTutorial, getTutorial, nextFrame, skipTutorial, subscribeTutorial, tutorialFromTown } from '../game/tutorialFlow';
 import { CardCopy } from './BuildPanel';
 import { isPhone, setUi } from './uiState';
@@ -48,7 +48,12 @@ export function TutorialCaption() {
 
   if (!t.active) return null;
   const lines = Array.isArray(frame.text) ? frame.text : [frame.text];
-  const text = t.frame === 'road' && t.retry ? [STEP6_RETRY] : lines;
+  const text =
+    t.frame === 'road' && t.retry
+      ? [STEP6_RETRY]
+      : (t.frame === 'cottage' || t.frame === 'sawmill') && t.offPlot
+        ? [OFF_PLOT_CAPTION[t.frame]]
+        : lines;
 
   return (
     <div className={`tutorial-caption panel tutorial-${frame.kind}`} role="dialog" aria-label={`Tutorial step ${frame.step}`} aria-live="polite">
