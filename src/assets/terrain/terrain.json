@@ -6,8 +6,8 @@
       "soilColor": "#634937"
     },
     "hill": {
-      "groundColor": "#b0b37c",
-      "soilColor": "#8c664d"
+      "groundColor": "#a1b286",
+      "soilColor": "#6f5a4b"
     },
     "marsh": {
       "groundColor": "#77a8a5",
@@ -83,54 +83,58 @@
     "hill-1": {
       "type": "hill",
       "variant": 1,
-      "faceWidth": 1560,
-      "faceHeight": 992,
-      "projectionRatio": 1.573,
+      "faceWidth": 843,
+      "faceHeight": 501,
+      "projectionRatio": 1.683,
       "kind": "props",
       "file": "props-hill-1.png",
-      "width": 93,
-      "height": 53,
-      "anchorX": 0.48014,
-      "anchorY": 0.83981
+      "width": 80,
+      "height": 42,
+      "anchorX": 0.50475,
+      "anchorY": 0.73921,
+      "source": "terrain-foothills.jpg (v3.0.2)"
     },
     "hill-2": {
       "type": "hill",
       "variant": 2,
-      "faceWidth": 1561,
-      "faceHeight": 1001,
-      "projectionRatio": 1.559,
+      "faceWidth": 846,
+      "faceHeight": 502,
+      "projectionRatio": 1.685,
       "kind": "props",
       "file": "props-hill-2.png",
-      "width": 68,
-      "height": 44,
-      "anchorX": 0.65,
-      "anchorY": 0.90758
+      "width": 84,
+      "height": 43,
+      "anchorX": 0.51087,
+      "anchorY": 0.72064,
+      "source": "terrain-foothills.jpg (v3.0.2)"
     },
     "hill-3": {
       "type": "hill",
       "variant": 3,
-      "faceWidth": 1561,
-      "faceHeight": 998,
-      "projectionRatio": 1.564,
+      "faceWidth": 842,
+      "faceHeight": 481,
+      "projectionRatio": 1.751,
       "kind": "props",
       "file": "props-hill-3.png",
-      "width": 83,
-      "height": 49,
-      "anchorX": 0.53297,
-      "anchorY": 0.83277
+      "width": 101,
+      "height": 42,
+      "anchorX": 0.48115,
+      "anchorY": 0.7029,
+      "source": "terrain-foothills.jpg (v3.0.2)"
     },
     "hill-4": {
       "type": "hill",
       "variant": 4,
-      "faceWidth": 1561,
-      "faceHeight": 997,
-      "projectionRatio": 1.566,
+      "faceWidth": 843,
+      "faceHeight": 481,
+      "projectionRatio": 1.753,
       "kind": "props",
       "file": "props-hill-4.png",
-      "width": 84,
-      "height": 60,
-      "anchorX": 0.5299,
-      "anchorY": 0.74143
+      "width": 106,
+      "height": 49,
+      "anchorX": 0.42357,
+      "anchorY": 0.775,
+      "source": "terrain-foothills.jpg (v3.0.2)"
     },
     "marsh-1": {
       "type": "marsh",
