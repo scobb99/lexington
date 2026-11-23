@@ -423,6 +423,7 @@ function buildStage(
   };
   const saved = store.state.pendingCamera;
   let goalAnim = 0;
+  let paintFrom: { x: number; y: number } | null = null; // where a building-placing touch began
   const camera = attachCamera({
     canvas,
     world,
@@ -436,12 +437,21 @@ function buildStage(
     onPaint: (phase, sx, sy, cam) => {
       const tile = screenToTile(cam, sx, sy);
       if (isBuildingTool()) {
-        // Phone: the ghost follows the finger; lifting it pins the ghost.
+        // Phone: the ghost follows the finger; lifting it pins the ghost. (v3.0.2, item D6) A plain
+        // tap moves the ghost to the tapped tile and pins it there, the same as a short drag; a
+        // touch the browser cancels (mobile Safari can send pointercancel for a quick tap) is
+        // still a tap when the finger did not travel, so the ghost lands where the finger did.
+        if (phase === 'start') paintFrom = { x: sx, y: sy };
         if (phase === 'start' || phase === 'move') {
           const p = store.state.placement;
           if (p?.pinned) store.state.placement = { ...p, pinned: false };
           moveGhost(tile.x, tile.y);
         } else if (phase === 'end') pinGhost(tile.x, tile.y);
+        else if (phase === 'cancel' && paintFrom && Math.hypot(sx - paintFrom.x, sy - paintFrom.y) <= 8) {
+          const t0 = screenToTile(cam, paintFrom.x, paintFrom.y);
+          pinGhost(t0.x, t0.y);
+        }
+        if (phase !== 'start' && phase !== 'move') paintFrom = null;
         return;
       }
     },
@@ -512,9 +522,6 @@ function buildStage(
       const r = el.getBoundingClientRect();
       if (r.top - cr.top > h / 2) bottom = Math.min(bottom, r.top - cr.top);
     }
-    // On a computer the placement bar opens just under a pinned building, so in the tutorial the
-    // place sits high enough for that bar to clear the caption too.
-    if (document.querySelector('.app-tutorial') && !window.matchMedia('(max-width: 767px)').matches) bottom -= 100;
     return bottom - top >= 60 ? (top + bottom) / 2 : h * 0.38;
   };
 
