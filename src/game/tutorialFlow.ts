@@ -1,43 +1,66 @@
-// The tutorial flow (Build Spec v2.0, Section 17): runs the steps of tutorial.ts in order.
+// The tutorial flow (Build Spec v3.0, Section 17, reworked): runs the steps of tutorial.ts in order.
 //
 // - The tutorial town is a sandbox on the fixed seed "hearth", with the normal starting wallet,
-//   the fixed first rack, Tier 1, no quests, and the real dictionary, rack and reward rules.
+//   fixed racks for the word and Commission steps, Tier 1, no quests, and the real dictionary,
+//   rack and reward rules. (v3.0) The town center is founded by step 3, and the cascade is off in
+//   the tutorial town (Section 4).
 // - Autosave is paused for the whole tutorial; nothing in it is saved to any slot. Entering from
 //   the in-game menu autosaves the real town first, and the player returns to that town at the
 //   end (the real town is also kept in memory, so it comes back even if saving is blocked).
 // - Reading steps have a Next button; action steps advance when the player does the action.
-//   Every step has Skip tutorial, which shows step 11's finish screen at once.
+//   Every step has Skip tutorial, which shows the finish screen at once.
 // - Finishing or skipping sets the tutorial flag in the settings record (Section 11).
+// - (v3.0, LOCKED ruling 7) Wallet handling: in the road and build steps the wallet is kept at or
+//   above what the step still needs, after every purchase, without comment; this folds in the
+//   Step 8 overspend fix (extra road pieces can no longer strand the Sawmill step).
 
 import { BUILDINGS } from './buildings';
+import type { Order } from './orders';
 import { flushAutosave, markTutorialDone, setTutorialPause } from './persistence';
-import { currentSave, hooks, loadSavedGame, panCameraTo, setMarks, setResources, setTool, setTutorialLocks, startTutorialTown, store, type MapMarks } from './store';
+import {
+  currentSave,
+  foundTownCenterAt,
+  hooks,
+  loadSavedGame,
+  panCameraTo,
+  setMarks,
+  setOrders,
+  setRackLetters,
+  setResources,
+  setTool,
+  setTutorialLocks,
+  startTutorialTown,
+  store,
+  type MapMarks,
+} from './store';
 import type { SaveData } from './save';
 import {
   COTTAGE_PLOT,
-  COTTAGE_TOP_UP,
   FRAME_ORDER,
   FRAMES,
   LAND_LABELS,
   OFF_PLOT_REASON,
-  PRACTICE_GRANT,
+  ROAD_PIECE_COINS,
   ROAD_START,
   SAWMILL_PLOT,
+  SAWMILL_ROAD_START,
+  TUTORIAL_CENTER,
   TUTORIAL_CENTRE,
   TUTORIAL_FIRST_RACK,
+  TUTORIAL_ORDER_RACK,
   TUTORIAL_REMOVE_ONLY,
   TUTORIAL_SEED,
   landLabelTiles,
   type FrameId,
 } from './tutorial';
-import { TILE_H, TILE_W, MAP_H, type Building, type Tool } from './types';
+import { TILE_H, TILE_W, MAP_H, type Building, type Resources, type Tool } from './types';
 
 export interface TutorialView {
   active: boolean;
   frame: FrameId;
-  /** Step 6: a legal road was confirmed that does not end beside the plot. */
+  /** The road step (a piece was laid, but not beside the plot) or the Commission step (a word missed the order). */
   retry: boolean;
-  /** Steps 7 and 8: a Cottage or Sawmill stands off the marked plot (safety net). */
+  /** The build steps: a Cottage or Sawmill stands off the marked plot (safety net). */
   offPlot: boolean;
   /** Where the tutorial was started from (the menu returns the player to their town). */
   from: 'title' | 'town';
@@ -68,32 +91,37 @@ let labels: { x: number; y: number }[] = [];
 
 function marksFor(frame: FrameId): MapMarks {
   const f = FRAMES[frame];
-  const showLabels = f.step >= 2 && f.step <= 10;
+  const showLabels = f.step >= 2 && f.step <= 13;
   const lit = f.label;
   const out: MapMarks = {
     plots: [],
     start: null,
     labels: showLabels ? labels.map((p, i) => ({ ...p, text: LAND_LABELS[i], lit: lit === i })) : [],
   };
+  if (frame === 'center') out.plots.push({ ...TUTORIAL_CENTER, w: 2, h: 2 });
   if (frame === 'road') {
     out.plots.push({ ...COTTAGE_PLOT, w: 1, h: 1 });
     out.start = ROAD_START;
   }
   if (frame === 'cottage') out.plots.push({ ...COTTAGE_PLOT, w: 1, h: 1 });
-  if (frame === 'grant' || frame === 'sawmill') out.plots.push({ ...SAWMILL_PLOT, w: BUILDINGS.sawmill.w, h: BUILDINGS.sawmill.h });
+  if (frame === 'sawmill') {
+    out.plots.push({ ...SAWMILL_PLOT, w: BUILDINGS.sawmill.w, h: BUILDINGS.sawmill.h });
+    out.start = SAWMILL_ROAD_START;
+  }
   return out;
 }
 
-/** What each frame allows (Section 17: word submission only in steps 3 and 9). */
+/** What each frame allows (word submission only in the word, Commission and pay steps). */
 function locksFor(frame: FrameId): { submit: boolean; tools: Tool[] } {
   switch (frame) {
     case 'word':
+    case 'order':
     case 'pay':
       return { submit: true, tools: [] };
     case 'road':
       return { submit: false, tools: ['road'] };
-    // Remove is open in the two build steps as a safety net (bug fix, Nov 22, 2026); the guard
-    // below lets it act only on a building placed off the marked plot.
+    // Remove is open in the two build steps as a safety net (v2.1.1 fix); the guard below lets it
+    // act only on a building placed off the marked plot.
     case 'cottage':
       return { submit: false, tools: ['cottage', 'remove'] };
     case 'sawmill':
@@ -103,38 +131,51 @@ function locksFor(frame: FrameId): { submit: boolean; tools: Tool[] } {
   }
 }
 
+/** The first Commission: two E's, paying 10 Coins, with two other orders beside it. */
+function firstOrders(): Order[] {
+  const at = store.state.lifetime.validWords;
+  return [
+    { id: 1, cond: { type: 'twice', letter: 'E' }, reward: { res: 'coins', amount: 10 }, postedAt: at },
+    { id: 2, cond: { type: 'rare' }, reward: { res: 'stone', amount: 6 }, postedAt: at },
+    { id: 3, cond: { type: 'len', min: 6 }, reward: { res: 'lumber', amount: 8 }, postedAt: at },
+  ];
+}
+
 function go(frame: FrameId): void {
   setView({ frame, retry: false, offPlot: false });
   setTutorialLocks(locksFor(frame));
   setMarks(marksFor(frame));
-  const s = store.state;
   switch (frame) {
     case 'land0':
       panCameraTo(TUTORIAL_CENTRE.x, TUTORIAL_CENTRE.y);
       break;
+    case 'center':
+      // (v3.0) The founding step: the town center appears, free, as the town's first building.
+      foundTownCenterAt(TUTORIAL_CENTER.x, TUTORIAL_CENTER.y);
+      panCameraTo(TUTORIAL_CENTER.x + 1, TUTORIAL_CENTER.y + 1);
+      break;
+    case 'order':
+      setRackLetters(TUTORIAL_ORDER_RACK);
+      setOrders(firstOrders());
+      setTool('inspect');
+      break;
     case 'road':
+      keepWallet('road');
       setTool('road');
       panCameraTo(COTTAGE_PLOT.x, COTTAGE_PLOT.y + 2);
       break;
     case 'cottage':
-      // Section 17: if extra roads left Coins below 10, top them up to 10 without comment.
-      if (s.resources.coins < COTTAGE_TOP_UP) setResources({ ...s.resources, coins: COTTAGE_TOP_UP });
+      keepWallet('cottage');
       setTool('cottage');
       break;
     case 'cottageDone':
     case 'sawmillDone':
       setTool('inspect');
       break;
-    case 'grant':
-      setTool('inspect');
-      panCameraTo(SAWMILL_PLOT.x, SAWMILL_PLOT.y);
-      break;
     case 'sawmill':
-      // Build reading (bug fix, Nov 22, 2026): like step 7's Coins top-up, make sure the wallet
-      // covers a Sawmill without comment. On the normal path (after the 30 Coins and 10 Lumber
-      // grant) this changes nothing; it only matters if a stray Cottage was removed in step 7.
-      coverCost('sawmill');
+      keepWallet('sawmill');
       setTool('road');
+      panCameraTo(SAWMILL_PLOT.x, SAWMILL_PLOT.y);
       break;
     case 'pay':
     case 'word':
@@ -150,25 +191,34 @@ function go(frame: FrameId): void {
   }
 }
 
-/** Tutorial practice money: raises each resource to at least this building's cost. */
-function coverCost(type: 'cottage' | 'sawmill'): void {
-  const cost = BUILDINGS[type].cost;
+/**
+ * Tutorial practice money (the tutorial town is never saved): raises each resource to at least
+ * what the step still needs. Road step: one 3 tile piece plus a Cottage. Cottage step: a Cottage.
+ * Sawmill step: one 3 tile piece plus a Sawmill (the Step 8 overspend fix).
+ */
+function keepWallet(step: 'road' | 'cottage' | 'sawmill'): void {
+  const need: Resources = { coins: 0, lumber: 0, stone: 0, knowledge: 0, magic: 0 };
+  const add = (c: Resources) => (Object.keys(need) as (keyof Resources)[]).forEach((k) => (need[k] += c[k]));
+  if (step === 'road' || step === 'cottage') add(BUILDINGS.cottage.cost);
+  if (step === 'sawmill') add(BUILDINGS.sawmill.cost);
+  if (step !== 'cottage') need.coins += ROAD_PIECE_COINS;
   const r = store.state.resources;
-  const next = {
-    coins: Math.max(r.coins, cost.coins),
-    lumber: Math.max(r.lumber, cost.lumber),
-    stone: Math.max(r.stone, cost.stone),
-    knowledge: Math.max(r.knowledge, cost.knowledge),
-    magic: Math.max(r.magic, cost.magic),
-  };
-  if (Object.keys(next).some((k) => next[k as keyof typeof next] !== r[k as keyof typeof r])) setResources(next);
+  const next = { ...r };
+  let changed = false;
+  for (const k of Object.keys(need) as (keyof Resources)[]) {
+    if (next[k] < need[k]) {
+      next[k] = need[k];
+      changed = true;
+    }
+  }
+  if (changed) setResources(next);
 }
 
 function adjacentToCottagePlot(t: { x: number; y: number }): boolean {
   return Math.abs(t.x - COTTAGE_PLOT.x) + Math.abs(t.y - COTTAGE_PLOT.y) === 1;
 }
 
-/** Steps 7 and 8: the building the step asks for and its marked plot (footprint origin). */
+/** The build steps: the building the step asks for and its marked plot (footprint origin). */
 function wantedPlot(): { type: 'cottage' | 'sawmill'; x: number; y: number } | null {
   if (view.frame === 'cottage') return { type: 'cottage', ...COTTAGE_PLOT };
   if (view.frame === 'sawmill') return { type: 'sawmill', ...SAWMILL_PLOT };
@@ -184,19 +234,32 @@ function strayStanding(type: 'cottage' | 'sawmill'): boolean {
   return store.state.buildings.some((b) => b.type === type && !onItsPlot(b));
 }
 
+let ordersBefore = 0;
+
 function attachHooks(): void {
   hooks.onWord = ({ ok, produced }) => {
     if (!ok) return;
     if (view.frame === 'word') go('reward');
-    else if (view.frame === 'pay' && produced) go('happiness');
+    else if (view.frame === 'order') {
+      // The Commission step advances when the first order completes; otherwise it asks again.
+      if (store.state.lifetime.ordersCompleted > ordersBefore) go('road');
+      else {
+        // The fixed rack comes back, so the two-E order can always still be spelled.
+        setRackLetters(TUTORIAL_ORDER_RACK);
+        setView({ retry: true });
+      }
+    } else if (view.frame === 'pay' && produced) go('lanterns');
   };
   hooks.onPathConfirmed = (kind, tiles) => {
     if (view.frame !== 'road' || kind !== 'road') return;
-    // Step 6 advances when a confirmed road path ends beside the Cottage plot. Build reading: any
-    // new tile of the confirmed path beside the plot counts, so a road drawn from the plot outward
-    // also works; otherwise the road stands, is paid for, and the caption asks again.
+    // The road step advances when a laid piece puts a road tile beside the Cottage plot;
+    // otherwise the piece stays in the network and the caption asks again.
     if (tiles.some(adjacentToCottagePlot)) go('cottage');
     else setView({ retry: true });
+  };
+  hooks.onBought = () => {
+    // LOCKED ruling 7: buying pieces in the road or Sawmill step can never strand the step.
+    if (view.frame === 'road' || view.frame === 'sawmill') keepWallet(view.frame);
   };
   hooks.onBuilt = (b) => {
     const want = wantedPlot();
@@ -206,22 +269,20 @@ function attachHooks(): void {
     // caption says so and asks for Remove, instead of the step silently waiting forever.
     else setView({ offPlot: true });
   };
-  // Steps 7 and 8: a legal spot that is not the marked plot shows red with this reason, so the
-  // wrong placement cannot be confirmed. The normal reasons (road, hill, no road) still come
-  // first, as Section 17 step 7 asks ("Try the road or the hill: it turns red and tells you why").
+  // Build steps: a legal spot that is not the marked plot shows red with this reason, so the
+  // wrong placement cannot be confirmed. The normal reasons (road, hill, no road) still come first.
   hooks.placementGuard = (type, x, y) => {
     const want = wantedPlot();
     return want && type === want.type && (x !== want.x || y !== want.y) ? OFF_PLOT_REASON : null;
   };
-  // Remove acts only on a building placed off its plot, so it can't take away the step 6 road
-  // (the road tool is locked in step 7) or a building the tutorial still needs.
+  // Remove acts only on a building placed off its plot, so it can't take away a road piece the
+  // step needs or a building the tutorial still needs.
   hooks.removeGuard = (_x, _y, b) => (wantedPlot() && !(b && !onItsPlot(b)) ? TUTORIAL_REMOVE_ONLY : null);
   hooks.onRemoved = (b) => {
     const want = wantedPlot();
     if (!want || b.type !== want.type) return;
-    // Removal refunds only half, so top the wallet up to the building's cost again. This is
-    // tutorial practice money (the tutorial town is never saved), as with step 7's Coins top-up.
-    coverCost(want.type);
+    // Removal refunds only half, so top the wallet up again (tutorial practice money).
+    keepWallet(want.type);
     if (!strayStanding(want.type)) setView({ offPlot: false });
     setTool(want.type);
   };
@@ -231,6 +292,7 @@ function detachHooks(): void {
   hooks.onWord = undefined;
   hooks.onPathConfirmed = undefined;
   hooks.onBuilt = undefined;
+  hooks.onBought = undefined;
   hooks.placementGuard = undefined;
   hooks.removeGuard = undefined;
   hooks.onRemoved = undefined;
@@ -256,19 +318,15 @@ export async function startTutorial(from: 'title' | 'town'): Promise<void> {
   go('welcome');
 }
 
-/** Next on a reading step. Step 8's practice money is applied when the player taps Next. */
+/** Next on a reading step. */
 export function nextFrame(): void {
-  const f = view.frame;
-  if (f === 'grant') {
-    const r = store.state.resources;
-    setResources({ ...r, coins: r.coins + PRACTICE_GRANT.coins, lumber: r.lumber + PRACTICE_GRANT.lumber });
-  }
-  const i = FRAME_ORDER.indexOf(f);
+  const i = FRAME_ORDER.indexOf(view.frame);
   if (i < 0 || i >= FRAME_ORDER.length - 1) return;
+  if (FRAME_ORDER[i + 1] === 'order') ordersBefore = store.state.lifetime.ordersCompleted;
   go(FRAME_ORDER[i + 1]);
 }
 
-/** Skip tutorial: ends at once and shows step 11's finish screen. */
+/** Skip tutorial: ends at once and shows the finish screen. */
 export function skipTutorial(): void {
   go('finish');
 }
