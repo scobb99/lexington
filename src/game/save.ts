@@ -24,6 +24,7 @@
 
 import { BUILDINGS, placementProblem, population } from './buildings';
 import { NAME } from './config';
+import { roomiestSpot } from './founding';
 import { landmarksEarnedBy, LANDMARK_ORDER } from './landmarks';
 import { PIECE_LENGTHS, emptyBank, gridsFromPieces, pieceTiles, type Bank, type Dir, type Piece, type PieceKind } from './network';
 import { allConditions, condKey, type Order, type OrderCond, type RewardRes } from './orders';
@@ -326,34 +327,18 @@ export function migrateV1toV2(old: Record<string, unknown>): Record<string, unkn
 
 
 /**
- * (v3.0) Section 18 founding search for a migrated town: the tile nearest the map centre (27, 27)
- * whose full 2 by 2 footprint is meadow or cleared land, unoccupied (no building, road or bridge)
- * and inside the map, widening ring by ring to the whole map.
+ * Section 18 founding search for a migrated town. (v3.0.1) The same roomier search a new town
+ * uses (founding.ts): a tile is open when it is meadow or cleared land, unoccupied (no building,
+ * road, bridge or flower) and inside the map.
  */
 export function foundCenterOn(tiles: Uint8Array, changed: Uint8Array, blocked: Uint8Array): { x: number; y: number } | null {
-  const open = (x: number, y: number) => {
+  return roomiestSpot((x, y) => {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
     const i = y * MAP_W + x;
     const t = tiles[i];
     const meadow = t === Terrain.Meadow || (changed[i] === 1 && (t === Terrain.Forest || t === Terrain.Thicket || t === Terrain.Marsh));
     return meadow && !blocked[i];
-  };
-  for (let r = 0; r < MAP_W; r++) {
-    let best: { x: number; y: number } | null = null;
-    let bestD = Infinity;
-    for (let y = 27 - r; y <= 27 + r; y++)
-      for (let x = 27 - r; x <= 27 + r; x++) {
-        if (Math.max(Math.abs(x - 27), Math.abs(y - 27)) !== r) continue;
-        if (!(open(x, y) && open(x + 1, y) && open(x, y + 1) && open(x + 1, y + 1))) continue;
-        const d = Math.hypot(x - 27, y - 27);
-        if (d < bestD) {
-          bestD = d;
-          best = { x, y };
-        }
-      }
-    if (best) return best;
-  }
-  return null;
+  });
 }
 
 /**
