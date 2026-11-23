@@ -7,6 +7,7 @@ import * as session from './game/session';
 import * as tutorial from './game/tutorialFlow';
 import { startDictionary } from './game/store';
 import { installKeyboard } from './ui/keyboard';
+import { startViewportAnchoring } from './ui/viewport';
 import './styles.css';
 
 // Section 14 test hook: ?testHooks exposes the store, the save functions and the tutorial flow to
@@ -29,6 +30,9 @@ async function start(): Promise<void> {
 
   // Section 10: one document-level keydown listener, registered once.
   installKeyboard();
+
+  // (v3.0.2) Keep the app inside the visible area in mobile Safari (src/ui/viewport.ts).
+  startViewportAnchoring();
 
   // StrictMode is left off on purpose: in development it mounts every component twice, which
   // would show two Pixi Applications during the Section 14 instance-count check.
