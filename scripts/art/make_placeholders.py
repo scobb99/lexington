@@ -1,3 +1,7 @@
+"""OBSOLETE since v3.0.2: the Gemini art for every slot this script filled is in (see
+process_v3_art.py). Do not run it: it would overwrite the real Town Center, Scribe and landmark
+sprites with plank-sign stand-ins.
+"""
 """Placeholder art for the v3.0 pieces still being drawn by Gemini (Build Spec v3.0, Section 3).
 
 Until each Gemini piece lands, the build uses a simple plank sign sprite for the Town Center and
