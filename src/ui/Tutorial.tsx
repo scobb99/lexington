@@ -1,4 +1,4 @@
-// The tutorial's caption panel (Build Spec v2.0, Section 17).
+// The tutorial's caption panel (Build Spec v3.0, Section 17, reworked).
 // One caption panel carries every step: bottom centre above the rack on desktop, above the
 // bottom dock on the phone. Reading steps have a Next button; action steps advance when the
 // player does the action. Every step shows Skip tutorial. The control or place a step teaches
@@ -6,7 +6,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { goToTitle } from '../game/session';
-import { FRAMES, OFF_PLOT_CAPTION, STEP6_RETRY } from '../game/tutorial';
+import { FRAMES, OFF_PLOT_CAPTION, ORDER_RETRY, STEP6_RETRY, STEP_COUNT } from '../game/tutorial';
 import { backToTown, endTutorial, getTutorial, nextFrame, skipTutorial, subscribeTutorial, tutorialFromTown } from '../game/tutorialFlow';
 import { CardCopy } from './BuildPanel';
 import { isPhone, setUi } from './uiState';
@@ -21,6 +21,7 @@ const TARGETS: Record<string, string> = {
   'cottage-card': '[data-tour="cottage-card"]',
   'sawmill-card': '[data-tour="sawmill-card"]',
   happiness: '[data-tour="happiness"]',
+  hint: '[data-tour="hint"]',
 };
 
 export function TutorialCaption() {
@@ -38,7 +39,7 @@ export function TutorialCaption() {
     return () => els.forEach((el) => el.classList.remove('tour-pulse'));
   }, [t.active, t.frame, frame.highlight]);
 
-  // Step 10: the happiness panel opens.
+  // The happiness step: the happiness panel opens.
   useEffect(() => {
     if (t.active && t.frame === 'happiness') {
       setUi({ happyOpen: true });
@@ -51,6 +52,8 @@ export function TutorialCaption() {
   const text =
     t.frame === 'road' && t.retry
       ? [STEP6_RETRY]
+      : t.frame === 'order' && t.retry
+        ? [ORDER_RETRY]
       : (t.frame === 'cottage' || t.frame === 'sawmill') && t.offPlot
         ? [OFF_PLOT_CAPTION[t.frame]]
         : lines;
@@ -58,7 +61,7 @@ export function TutorialCaption() {
   return (
     <div className={`tutorial-caption panel tutorial-${frame.kind}`} role="dialog" aria-label={`Tutorial step ${frame.step}`} aria-live="polite">
       <p className="tutorial-step">
-        Step {frame.step} of 11 · {frame.title}
+        Step {frame.step} of {STEP_COUNT} · {frame.title}
       </p>
       {t.frame === 'cottage' && isPhone() && <CardCopy type="cottage" />}
       <div className="tutorial-text">
