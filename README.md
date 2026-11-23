@@ -2,7 +2,14 @@
 
 A cozy, word-driven city builder. Built to **Build Spec v3.0** with the Nov 22, 2026 lock amendment.
 
-**Status: v3.0.0 is built.** What changed from v2:
+**Status: v3.0.1 is built** (a patch on v3.0.0; no rule, cost or economy changes):
+
+- **Tutorial fix:** a road piece can no longer cover the marked Cottage or Sawmill plot (the ghost turns red and says why), so the Cottage step can always be finished. If a piece is ever on the plot anyway, Remove can take it off and it goes back to the bank.
+- **Easier building steps:** the tutorial card has a **Place the Cottage on the marked plot** button (and one for the Sawmill). Placing by hand still works.
+- **Easier to see:** the build steps centre the map on a strongly outlined plot, and on a phone the tutorial card is smaller, so more of the map shows.
+- **Roomier town centers:** a new town's town center now goes on the roomiest open meadow in the middle of the map, not the first spot nearest the centre, and the map opens centred on it.
+
+What changed from v2 to v3.0:
 
 - **Words pay Coins, Knowledge and Magic only.** Lumber and Stone come from buildings, Workshop stamps and Commission orders.
 - **Town center:** every town starts with one in the middle. It is free, it can't be removed, and every road must connect back to it.
@@ -22,7 +29,7 @@ A cozy, word-driven city builder. Built to **Build Spec v3.0** with the Nov 22, 
 ### Starting
 
 - **Continue:** back to your town, just as you left it. It only shows when there is a saved town.
-- **New Town:** a fresh map with its town center. If you already have a saved town, type **NEW** to confirm, because the autosave is replaced. Your three save slots are kept.
+- **New Town:** a fresh map with its town center on roomy open meadow near the middle. If you already have a saved town, type **NEW** to confirm, because the autosave is replaced. Your three save slots are kept.
 - **How to Play:** the tutorial. You can **Skip tutorial** at any step.
 - **Saves:** load a slot, export a slot to a file, or import a town file.
 
@@ -42,7 +49,7 @@ A cozy, word-driven city builder. Built to **Build Spec v3.0** with the Nov 22, 
   **Cancel**, **Esc** or a right-click puts the piece back in the bank.
 - **Remove:** click **Remove**, then a piece or building. If removing a piece would cut buildings off from the town center, the warning names them first.
 - **Clear / Drain:** click the tool, then click one tile at a time. Clearing gravel is free and gives 3 Stone.
-- **Place a building:** click its card, click the map to pin the ghost, then **Confirm**.
+- **Place a building:** click its card, click the map to pin the ghost, then **Confirm**. (In How to Play, the Cottage and Sawmill steps also have a button that places the building on the marked plot for you.)
 - **Landmarks:** when you earn one, a **Place** button appears in the build panel.
 
 ### On a phone
@@ -65,7 +72,7 @@ You only need a web browser for this.
 
 ### 1. Put the files on GitHub
 
-1. Unzip the newest zip Claude sent (for example `lexington-v3.0.0.zip`) on your Mac. You get a folder called `wordcity`.
+1. Unzip the newest zip Claude sent (for example `lexington-v3.0.1.zip`) on your Mac. You get a folder called `wordcity`.
 2. Open your repository on GitHub. If it is still called `wordcity`, rename it first:
    1. Open **Settings** (the tab at the top of the repository).
    2. Under **Repository name**, type `lexington`.
@@ -127,7 +134,8 @@ npm run typecheck  # TypeScript check (not part of the Vercel build)
   - `src/game/orders.ts` and `src/data/orderSolvability.json`: Commission orders and the offline solvability table (regenerate with `node scripts/orders/solvability.mjs`);
   - `src/game/stamps.ts`: Workshop stamps and the Rune;
   - `src/game/landmarks.ts`: landmark milestones;
-  - `src/game/terrainChange.ts`: growth and overflow, seeded from the map seed and the word count.
+  - `src/game/terrainChange.ts`: growth and overflow, seeded from the map seed and the word count;
+  - `src/game/founding.ts` (v3.0.1): where the town center is founded, for a new town and the v2 migration.
 - **The Pixi map:** `src/pixi/MapView.tsx` is the only component that touches Pixi; mounted once. Terrain changes repaint only the changed area of the baked texture (`bakeTerrain(..., { into, region })` in `src/pixi/terrainBake.ts`).
 - **Saves:** format version 3 in `src/game/save.ts`; the migration chain is v1 to v2 (marsh roads to bridges) then v2 to v3 (town center, legacy pieces, rack size, landmarks).
 - **Tutorial:** text and fixed data in `src/game/tutorial.ts` (every caption is marked BUILD WORDING for Stu to review), flow in `src/game/tutorialFlow.ts`.
