@@ -1,4 +1,6 @@
-// Building layer (Build Spec v2.0, Sections 3, 10 and 13).
+// Building layer (Build Spec v3.0, Sections 3, 10 and 13).
+// (v3.0) The Town Center, the Scribe and the six landmarks use placeholder sprites in the same
+// slots (scripts/art/make_placeholders.py) until their Gemini art lands (Section 3).
 // v2.0 polish (Section 13): every building is grounded with a soft ground tint and a contact
 // shadow under its footprint, drawn on one Graphics under the sprites, so buildings sit in the
 // terrain instead of floating on it. It redraws only when the buildings change.
@@ -12,7 +14,7 @@
 import { Assets, Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import { BUILDINGS } from '../game/buildings';
 import { store } from '../game/store';
-import type { BuildingType } from '../game/types';
+import type { Building, BuildingType, LandmarkId } from '../game/types';
 import spriteMeta from '../assets/buildings/sprites.json';
 import cottageUrl from '../assets/buildings/cottage.png?url';
 import sawmillUrl from '../assets/buildings/sawmill.png?url';
@@ -25,9 +27,26 @@ import parkUrl from '../assets/buildings/park.png?url';
 import greenhouseUrl from '../assets/buildings/greenhouse.png?url';
 import tavernUrl from '../assets/buildings/tavern.png?url';
 import wizardTowerUrl from '../assets/buildings/wizardtower.png?url';
+import townCenterUrl from '../assets/buildings/towncenter.png?url';
+import scribeUrl from '../assets/buildings/scribe.png?url';
+import fountainUrl from '../assets/buildings/landmark-fountain.png?url';
+import marketCrossUrl from '../assets/buildings/landmark-marketCross.png?url';
+import lanternPostUrl from '../assets/buildings/landmark-lanternPost.png?url';
+import oakArchUrl from '../assets/buildings/landmark-oakArch.png?url';
+import riverBellUrl from '../assets/buildings/landmark-riverBell.png?url';
+import foundersSpireUrl from '../assets/buildings/landmark-foundersSpire.png?url';
 import { depthKey, footprintAnchor, footprintDiamond } from './camera';
 
-const ART: Record<BuildingType, string> = {
+/** Art per sprite key: a building type, or "landmark-<id>" for each landmark. */
+const ART: Record<string, string> = {
+  townCenter: townCenterUrl,
+  scribe: scribeUrl,
+  'landmark-fountain': fountainUrl,
+  'landmark-marketCross': marketCrossUrl,
+  'landmark-lanternPost': lanternPostUrl,
+  'landmark-oakArch': oakArchUrl,
+  'landmark-riverBell': riverBellUrl,
+  'landmark-foundersSpire': foundersSpireUrl,
   cottage: cottageUrl,
   sawmill: sawmillUrl,
   quarry: quarryUrl,
@@ -50,24 +69,29 @@ interface SpriteInfo {
   baseWidth: number;
   footprint: [number, number];
 }
-export const SPRITES = spriteMeta.sprites as unknown as Record<BuildingType, SpriteInfo>;
+export const SPRITES = spriteMeta.sprites as unknown as Record<string, SpriteInfo>;
+
+/** The sprite key for a building: its type, or "landmark-<id>". */
+export function spriteKey(b: { type: BuildingType; landmark?: LandmarkId }): string {
+  return b.type === 'landmark' ? `landmark-${b.landmark ?? 'fountain'}` : b.type;
+}
 
 /** Where the chimney top sits in the cottage sprite (fraction of the image), for smoke. */
 const COTTAGE_CHIMNEY = { x: 0.48, y: 0.035 };
 
 export interface BuildingLayer {
   container: Container;
-  /** Loaded art for a building type (for the placement preview), once loading is done. */
-  texture(type: BuildingType): Texture | undefined;
+  /** Loaded art for a sprite key (for the placement preview), once loading is done. */
+  texture(key: string): Texture | undefined;
   /** World positions of every real cottage's chimney top (Section 10: chimney smoke). */
   chimneys(): { x: number; y: number }[];
   destroy(): void;
 }
 
 /** Position, anchor and scale for one building sprite on its footprint (Section 3). */
-export function spritePlacement(type: BuildingType, x: number, y: number, tex: Texture) {
+export function spritePlacement(type: BuildingType, x: number, y: number, tex: Texture, key: string = type) {
   const def = BUILDINGS[type];
-  const info = SPRITES[type];
+  const info = SPRITES[key];
   const at = footprintAnchor(x, y, def.w, def.h);
   // Grass base width (in texture pixels) -> footprint diamond width (in world pixels).
   const scale = at.width / ((info.baseWidth * tex.width) / info.width);
@@ -94,7 +118,7 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
   container.sortableChildren = true;
   parent.addChild(container);
 
-  const textures = new Map<BuildingType, Texture>();
+  const textures = new Map<string, Texture>();
   const sprites = new Map<number, Sprite>();
   let destroyed = false;
 
@@ -106,8 +130,9 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
       drawGrounding(grounding, b.x, b.y, d.w, d.h); // every building, the Pier included (Section 13 ruling)
     }
     const live = new Set<number>();
-    for (const b of store.state.buildings) {
-      const tex = textures.get(b.type);
+    for (const b of store.state.buildings as Building[]) {
+      const key = spriteKey(b);
+      const tex = textures.get(key);
       if (!tex) continue;
       live.add(b.id);
       let s = sprites.get(b.id);
@@ -118,7 +143,7 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
         container.addChild(s);
       }
       const def = BUILDINGS[b.type];
-      const at = spritePlacement(b.type, b.x, b.y, tex);
+      const at = spritePlacement(b.type, b.x, b.y, tex, key);
       s.texture = tex;
       s.anchor.set(at.anchorX, at.anchorY);
       s.scale.set(at.scale);
@@ -137,7 +162,7 @@ export function createBuildingLayer(parent: Container, onError: (err: unknown) =
 
   // Load every building PNG once, then draw.
   (async () => {
-    const entries = Object.entries(ART) as [BuildingType, string][];
+    const entries = Object.entries(ART);
     for (const [type, url] of entries) {
       const key = `building-${type}`;
       if (!Assets.resolver.hasKey(key)) Assets.add({ alias: key, src: url }); // object form: no v7.2 deprecation warning
