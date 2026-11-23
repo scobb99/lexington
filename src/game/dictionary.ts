@@ -57,7 +57,7 @@ export function parseWordList(text: unknown): Set<string> {
   return out;
 }
 
-export type DictionaryTestMode = 'corrupt' | 'block' | null;
+export type DictionaryTestMode = 'corrupt' | 'block' | 'slow' | null;
 
 /** Loads and parses the bundled list once. Safe to call many times. */
 export function loadDictionary(testMode: DictionaryTestMode = null): Promise<DictionaryState> {
@@ -66,6 +66,8 @@ export function loadDictionary(testMode: DictionaryTestMode = null): Promise<Dic
     try {
       let text: unknown;
       if (testMode === 'block') throw new Error('dictionary blocked for testing');
+      // (v3.0.2) Test only (?testDict=slow): the list arrives after 6 seconds.
+      if (testMode === 'slow') await new Promise((r) => setTimeout(r, 6000));
       if (testMode === 'corrupt') {
         text = 'this is not\na word list \u0000\u0001 %%\n12345';
       } else {
