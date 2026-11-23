@@ -83,6 +83,9 @@ const ROAD_EDGE = 0x9c9586;
 const BRIDGE_TINT = 0x9a6b42;
 const BAD = 0xe0533f;
 const GOLD = 0xf2c94c;
+/** (v3.0.1) The tutorial plot outline: bright amber over a dark edge. */
+const PLOT_BRIGHT = 0xffb627;
+const PLOT_DARK = 0x2a1606;
 // Section 7: footprint tinted green or red at 35 percent.
 const GHOST_OK = 0x5fd068;
 const GHOST_BAD = 0xe0533f;
@@ -269,8 +272,9 @@ function buildStage(
       p.sprite.scale.set(0.25 + life * 0.55);
       p.sprite.alpha = (1 - life) * 0.55 * Math.min(1, life * 6);
     }
-    // Section 17: the tutorial's gold plot outline pulses (an alpha change only, no redraw).
-    if (marksLayer.visible) marksLayer.alpha = 0.65 + 0.35 * Math.sin(t * 4);
+    // Section 17: the tutorial's plot outline pulses (an alpha change only, no redraw). (v3.0.1) The
+    // strokes stay strong at the low point, so the plot never fades into the meadow.
+    if (marksLayer.visible) marksLayer.alpha = 0.84 + 0.16 * Math.sin(t * 4.5);
   };
   app.ticker.add(tick);
 
@@ -281,9 +285,14 @@ function buildStage(
     const m = store.state.marks;
     marksLayer.clear();
     marksLayer.visible = m.plots.length > 0 || !!m.start;
+    // (v3.0.1) A strong outline sized to the footprint: a dark under-stroke, then a bright amber
+    // stroke and a warm fill, so it reads against meadow, forest and hills alike.
     for (const p of m.plots) {
-      marksLayer.lineStyle({ width: 3.5, color: GOLD, alpha: 1 });
-      marksLayer.beginFill(GOLD, 0.16).drawPolygon(diamond(p.x, p.y, p.w, p.h)).endFill();
+      const poly = diamond(p.x, p.y, p.w, p.h);
+      marksLayer.lineStyle({ width: 9, color: PLOT_DARK, alpha: 0.75 });
+      marksLayer.drawPolygon(poly);
+      marksLayer.lineStyle({ width: 4.5, color: PLOT_BRIGHT, alpha: 1 });
+      marksLayer.beginFill(PLOT_BRIGHT, 0.3).drawPolygon(poly).endFill();
       marksLayer.lineStyle(0);
     }
     if (m.start) {
@@ -470,26 +479,69 @@ function buildStage(
 
   if (saved) pendingCameraApplied();
 
+  /**
+   * (v3.0.1) The middle of the map band left visible: below the HUD (and, on the phone in the
+   * tutorial, below the slot where the cost and placement bars appear) and above the tutorial
+   * caption and the bottom dock. Falls back to 38 percent of the view height.
+   */
+  const visibleBandMiddle = (h: number): number => {
+    const canvas = app.view as HTMLCanvasElement;
+    const cr = canvas.getBoundingClientRect?.();
+    if (!cr || cr.height <= 0) return h * 0.38;
+    let top = 0;
+    let bottom = h;
+    const shown = (el: Element | null): el is HTMLElement => !!el && (el as HTMLElement).getClientRects().length > 0;
+    for (const sel of ['.hud', '.phone-actions']) {
+      const el = document.querySelector(sel);
+      if (!shown(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.bottom - cr.top < h / 2) top = Math.max(top, r.bottom - cr.top);
+    }
+    // In the tutorial the cost, piece and placement bars sit at the top of the map (styles.css:
+    // 14 px into the map on a computer, 96 px from the top of the screen on the phone). Their slot
+    // is kept clear even before a bar shows, so a bar appearing later never covers the place.
+    if (document.querySelector('.app-tutorial')) {
+      const phone = window.matchMedia('(max-width: 767px)').matches;
+      const bar = document.querySelector('.cost-bar, .place-bar');
+      const slot = shown(bar) ? bar.getBoundingClientRect().bottom - cr.top : phone ? 96 + 80 - cr.top : 14 + 118;
+      top = Math.max(top, slot, phone ? 96 + 80 - cr.top : 14 + 118);
+    }
+    for (const sel of ['.tutorial-caption', '.bottom']) {
+      const el = document.querySelector(sel);
+      if (!shown(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.top - cr.top > h / 2) bottom = Math.min(bottom, r.top - cr.top);
+    }
+    // On a computer the placement bar opens just under a pinned building, so in the tutorial the
+    // place sits high enough for that bar to clear the caption too.
+    if (document.querySelector('.app-tutorial') && !window.matchMedia('(max-width: 767px)').matches) bottom -= 100;
+    return bottom - top >= 60 ? (top + bottom) / 2 : h * 0.38;
+  };
+
   // ---------- Section 17: pan to a place in about 600 ms, keeping it clear of the caption ----------
   const panTo = () => {
     const goal = store.state.cameraGoal;
     if (!goal) return;
-    const v = viewSize();
-    const from = camera.get();
-    const c = tileCentre(goal.x, goal.y);
-    const zoom = from.zoom;
-    // The caption panel sits at the bottom, so the place is framed in the upper part of the view.
-    const to = { x: v.w / 2 - c.x * zoom, y: v.h * 0.38 - c.y * zoom, zoom };
-    const start = performance.now();
     const id = ++goalAnim;
-    const step = (now: number) => {
+    // (v3.0.1) Measured one frame later, once the new caption has rendered, so the place is
+    // framed in the band of map the caption, the dock and the HUD leave visible.
+    requestAnimationFrame(() => {
       if (disposed || id !== goalAnim) return;
-      const k = Math.min(1, (now - start) / 600);
-      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      camera.set({ x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, zoom });
-      if (k < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+      const v = viewSize();
+      const from = camera.get();
+      const c = tileCentre(goal.x, goal.y);
+      const zoom = from.zoom;
+      const to = { x: v.w / 2 - c.x * zoom, y: visibleBandMiddle(v.h) - c.y * zoom, zoom };
+      const start = performance.now();
+      const step = (now: number) => {
+        if (disposed || id !== goalAnim) return;
+        const k = Math.min(1, (now - start) / 600);
+        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        camera.set({ x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, zoom });
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
   };
   const unsubscribeGoal = store.subscribe('cameraGoal', panTo);
 
