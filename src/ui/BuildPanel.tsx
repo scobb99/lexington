@@ -117,6 +117,11 @@ export function SidePanel() {
 
   const name = toolLabel(tool);
   const chip = toolChipText();
+  // (v3.0.2) On the phone the chip shows only for Clear, Drain and Remove: roads and bridges have
+  // the Roads button and the piece bar, buildings have the placement bar (each with its own way
+  // out), and a chip there would crowd the Roads button. While the chip shows, it takes the Menu
+  // button's place in the row.
+  const chipShown = !!name && !open && (tool === 'clear' || tool === 'drain' || tool === 'remove');
 
   return (
     <>
@@ -128,7 +133,7 @@ export function SidePanel() {
         <BuildPanel />
       </aside>
       <div className="phone-actions">
-        {name && !open && (
+        {chipShown && (
           <div className="tool-chip" role="status">
             <span>{chip ?? `Using ${name}`}</span>
             <button className="pill" onClick={() => setTool('inspect')}>
@@ -136,15 +141,18 @@ export function SidePanel() {
             </button>
           </div>
         )}
-        {!open && mode === 'town' && <MenuButton className="phone-menu" />}
+        {!open && mode === 'town' && !chipShown && <MenuButton className="phone-menu" />}
         {!open && mode !== 'title' && (
           <button className="pill orders-button" onClick={() => openOrders(true)}>
             Orders
           </button>
         )}
-        <button className="pill pill-primary sheet-toggle" onClick={() => setUi({ sheetOpen: !open })} aria-expanded={open}>
-          {open ? 'Close' : 'Build'}
-        </button>
+        {/* (v3.0.2) One Close while the sheet is open: the sheet's own. The toggle only opens it. */}
+        {!open && (
+          <button className="pill pill-primary sheet-toggle" onClick={() => setUi({ sheetOpen: true, roadsOpen: false })} aria-expanded={false} data-tour="build-toggle">
+            Build
+          </button>
+        )}
       </div>
     </>
   );
@@ -178,18 +186,21 @@ export function BuildPanel() {
       <div className="tool-row">
         {TOOLS.map((t) => {
           const drainLocked = t.tool === 'drain' && tier < DRAIN_TIER;
+          // (v3.0.2) Each tool's note sits under its button on the phone (hover title on a computer).
           return (
-            <button
-              key={t.tool}
-              className={`pill${tool === t.tool ? ' pill-selected' : ''}`}
-              onClick={() => setTool(tool === t.tool && t.tool !== 'inspect' ? 'inspect' : t.tool)}
-              title={t.note}
-              aria-pressed={tool === t.tool}
-              disabled={drainLocked || !allowed(t.tool) || (previewing && tool !== t.tool)}
-              data-tour={t.tool === 'road' ? 'road-tool' : undefined}
-            >
-              {t.label}
-            </button>
+            <div className="tool-cell" key={t.tool}>
+              <button
+                className={`pill${tool === t.tool ? ' pill-selected' : ''}`}
+                onClick={() => setTool(tool === t.tool && t.tool !== 'inspect' ? 'inspect' : t.tool)}
+                title={t.note}
+                aria-pressed={tool === t.tool}
+                disabled={drainLocked || !allowed(t.tool) || (previewing && tool !== t.tool)}
+                data-tour={t.tool === 'road' ? 'road-tool' : undefined}
+              >
+                {t.label}
+              </button>
+              <p className="tool-note">{t.note}</p>
+            </div>
           );
         })}
       </div>
