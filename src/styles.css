@@ -34,6 +34,41 @@ body,
   margin: 0;
 }
 
+/* (v3.0.2) Item A: size the page to the visible viewport where the browser supports it, keep
+   double-tap from zooming the page, and give every map gesture to the game (src/ui/viewport.ts). */
+html {
+  height: 100dvh;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+body,
+#root {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+.map-host canvas {
+  touch-action: none;
+}
+
+/* The visual viewport safety net: while the page is zoomed or scrolled, the app is pinned to the
+   visible area at normal size (all fixed layers inside follow, since #root then contains them). */
+body.vv-engaged #root {
+  position: fixed;
+  left: var(--vv-left, 0px);
+  top: var(--vv-top, 0px);
+  width: var(--vv-w, 100vw);
+  height: var(--vv-h, 100vh);
+  transform: scale(var(--vv-inv, 1));
+  transform-origin: 0 0;
+  overflow: hidden;
+}
+
 body {
   background: var(--bg);
   color: var(--cream);
@@ -693,6 +728,9 @@ h2 {
     display: block;
     position: fixed;
     inset: 0;
+    /* (v3.0.2) Item A: never taller than the visible area (dvh, or --vvh from visualViewport). */
+    height: var(--vvh, 100dvh);
+    height: 100dvh;
     padding: 0;
   }
 
@@ -710,9 +748,9 @@ h2 {
 
   .hud {
     position: fixed;
-    top: max(6px, env(safe-area-inset-top));
-    left: 6px;
-    right: 6px;
+    top: max(6px, var(--sat));
+    left: max(6px, var(--sal));
+    right: max(6px, var(--sar));
     z-index: 10;
     gap: 4px;
     padding: 5px;
@@ -791,7 +829,7 @@ h2 {
 
   .happy-pop {
     position: fixed;
-    top: 100px;
+    top: calc(94px + max(6px, var(--sat)));
     left: 8px;
     right: 8px;
     width: auto;
@@ -799,9 +837,9 @@ h2 {
 
   .bottom {
     position: fixed;
-    left: 6px;
-    right: 6px;
-    bottom: max(6px, env(safe-area-inset-bottom));
+    left: max(6px, var(--sal));
+    right: max(6px, var(--sar));
+    bottom: max(6px, var(--sab));
     z-index: 10;
     display: flex;
     flex-direction: column;
@@ -900,8 +938,8 @@ h2 {
   .phone-actions {
     display: flex;
     position: fixed;
-    right: 8px;
-    top: 56px;
+    right: max(8px, var(--sar));
+    top: calc(50px + max(6px, var(--sat)));
     z-index: 15;
     gap: 6px;
     align-items: center;
@@ -1561,6 +1599,14 @@ h2 {
   top: 14px;
 }
 
+/* (v3.0.2) In the tutorial the placement bar for a pinned building also sits in that top slot
+   (as it does on the phone), so the tutorial caption can never cover its Confirm button. */
+.app-tutorial .place-bar {
+  left: 50% !important;
+  top: 14px !important;
+  bottom: auto;
+}
+
 .tour-pulse {
   position: relative;
   outline: 3px solid var(--gold) !important;
@@ -1665,7 +1711,7 @@ h2 {
   /* With the tutorial caption showing, the bars move up to the top, under the HUD. */
   .app-tutorial .cost-bar,
   .app-tutorial .place-bar {
-    top: 96px !important;
+    top: calc(90px + max(6px, var(--sat))) !important;
     bottom: auto !important;
   }
 
@@ -2071,5 +2117,314 @@ h2 {
   .piece-bar {
     bottom: 8px;
     width: calc(100% - 16px);
+  }
+}
+
+/* ---------- v3.0.2: the free Hint's answer at the rack ---------- */
+.hint-longest {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.hint-pending {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ======================================================================
+   v3.0.2: the on-map Roads control (item B) and the phone pass (item D).
+   ====================================================================== */
+
+/* ---------- Roads button and tray (all screen sizes) ---------- */
+.roads {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+}
+
+.roads-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(43, 36, 31, 0.94);
+  border-color: var(--gold);
+  box-shadow: var(--shadow);
+}
+
+.roads-count {
+  background: var(--gold);
+  color: #2b241f;
+}
+
+.roads-tray {
+  width: min(300px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--gold);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.roads-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.roads-head h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--gold);
+}
+
+.roads-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.roads-piece {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.roads-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Desktop: the tool notes stay as hover titles; the phone shows them under each tool. */
+.tool-cell {
+  display: contents;
+}
+
+.tool-note {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  /* ---------- Roads on the phone: its own lane at the left of the action row, under the HUD.
+     The action row starts to the right of it, so the two can never overlap. ---------- */
+  .phone-actions {
+    left: calc(max(8px, var(--sal)) + 104px);
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .tool-chip {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .tool-chip > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .roads-button {
+    max-width: 96px;
+  }
+
+  .roads {
+    position: fixed;
+    top: calc(50px + max(6px, var(--sat)));
+    left: max(8px, var(--sal));
+    max-width: calc(100vw - 16px);
+    z-index: 15;
+  }
+
+  .roads-tray {
+    width: min(320px, calc(100vw - 16px));
+    max-height: calc(100dvh - var(--dock-h, 230px) - 120px);
+    overflow-y: auto;
+  }
+
+  /* ---------- D1: the main phone controls are at least 40 px tall ---------- */
+  .rack-controls .pill,
+  .phone-actions .pill,
+  .roads .pill,
+  .orders-panel .pill,
+  .tool-row .pill,
+  .bank-row .pill,
+  .cost-bar .pill,
+  .place-bar .pill,
+  .sheet-close,
+  .dialog .pill,
+  .confirm .pill,
+  .tutorial-buttons .pill,
+  .tool-chip .pill,
+  .happy-pop .pill,
+  .menu-item {
+    min-height: 40px;
+  }
+
+  .rack-controls .pill {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .tool-chip {
+    padding: 2px 2px 2px 12px;
+  }
+
+  /* ---------- D2: Build first in the sheet, then the town goals; a lower sheet ---------- */
+  .side {
+    max-height: 64vh;
+    max-height: 64dvh;
+  }
+
+  .side .sheet-close {
+    order: -1;
+  }
+
+  .side .build {
+    order: 0;
+  }
+
+  .side .town {
+    order: 1;
+  }
+
+  .sheet-close {
+    padding: 8px 18px;
+  }
+
+  /* ---------- D5: each tool's note under its button ---------- */
+  .tool-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 8px;
+  }
+
+  .tool-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .tool-cell .pill {
+    width: 100%;
+  }
+
+  .tool-note {
+    display: block;
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: var(--muted);
+  }
+
+  /* ---------- D3: the orders panel never runs under the dock; its footer stays visible ---------- */
+  .orders-panel {
+    top: calc(92px + max(6px, var(--sat)));
+    max-height: calc(100dvh - var(--dock-h, 230px) - 98px - max(6px, var(--sat)) - 18px);
+    overflow: hidden;
+  }
+
+  .orders-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .orders-head,
+  .orders-summary,
+  .orders-discard {
+    flex: none;
+  }
+}
+
+/* ---------- v3.0.2: the Gemini overlay art (replaces the v3.0 stand-ins) ---------- */
+.tile-stamp::after {
+  width: 18px;
+  height: 18px;
+  top: 2px;
+  right: 2px;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+.tile-stamp-oak::after {
+  background-image: url('./assets/ui/stamp-oak.png');
+}
+
+.tile-stamp-granite::after {
+  background-image: url('./assets/ui/stamp-granite.png');
+}
+
+.tile-stamp-gilded::after {
+  background-image: url('./assets/ui/stamp-gilded.png');
+  box-shadow: none;
+}
+
+.word-letter.tile-stamp::after {
+  width: 13px;
+  height: 13px;
+  top: 1px;
+  right: 1px;
+}
+
+/* The Rune's rack slot is the rune tile art; a placed Rune in the word keeps its purple face
+   with the rune art as a small badge, so the chosen letter stays readable. */
+.rack-tiles .rune-slot {
+  background: url('./assets/ui/rune-tile.png') center / 100% 100% no-repeat;
+  border: none;
+  box-shadow: 0 0 8px rgba(183, 156, 240, 0.5);
+}
+
+.rack-tiles .rune-slot.tile-used {
+  opacity: 0.45;
+  color: #f1e9ff;
+  text-shadow: 0 1px 2px #000;
+}
+
+.word-letter.tile-rune {
+  position: relative;
+}
+
+.word-letter.tile-rune::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 13px;
+  height: 13px;
+  background: url('./assets/ui/rune-tile.png') center / contain no-repeat;
+}
+
+.lantern-icon {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  background: url('./assets/ui/lantern.png') center / contain no-repeat;
+  vertical-align: -3px;
+}
+
+@media (max-width: 767px) {
+  .tile-stamp::after {
+    width: 15px;
+    height: 15px;
   }
 }
