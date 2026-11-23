@@ -16,7 +16,6 @@ import iconMagic from '../assets/ui/icon-magic.png?url';
 import { setUi, useUi } from './uiState';
 import { population } from '../game/buildings';
 import { RESOURCE_KEYS, RESOURCE_LABELS, type ResourceKey } from '../game/types';
-import { happinessMultiplier } from '../game/words';
 
 /** Section 3 UI art: the Gemini resource icons (coin, lumber, stone, knowledge book, magic sparkle). */
 const ICONS: Record<ResourceKey, string> = {
@@ -38,13 +37,6 @@ export function shortNumber(v: number): string {
   return `${Math.floor(v / 1000)}k`;
 }
 
-const BANDS: [string, string][] = [
-  ['80 to 100', 'x1.2'],
-  ['60 to 79', 'x1.1'],
-  ['40 to 59', 'x1.0'],
-  ['20 to 39', 'x0.9'],
-  ['0 to 19', 'x0.8'],
-];
 
 export function Hud() {
   const resources = useGame((s) => s.resources);
@@ -53,7 +45,6 @@ export function Hud() {
   useGame((s) => s.roads); // road links change happiness (Section 8)
   const pop = population(buildings);
   const happy = currentHappiness();
-  const mult = happinessMultiplier(happy);
   const showHappy = useUi((u) => u.happyOpen);
   const mode = useGame((s) => s.mode);
   const popRef = useRef<HTMLDivElement>(null);
@@ -93,9 +84,9 @@ export function Hud() {
             data-tour="happiness"
             onClick={() => setUi({ happyOpen: !showHappy })}
             aria-expanded={showHappy}
-            title={`Happiness ${happy}: word rewards x${mult.toFixed(1)}. Tap for details.`}
+            title={`Happiness ${happy}. Tap for details.`}
           >
-            <span className="stat-label">Happy</span> {happy} <span className="stat-mult">x{mult.toFixed(1)}</span>
+            <span className="stat-label">Happy</span> {happy}
           </button>
           {showHappy && (
             <div className="happy-pop" ref={popRef} role="dialog" aria-label="Happiness">
@@ -110,15 +101,7 @@ export function Hud() {
                   </li>
                 ))}
               </ul>
-              <p className="happy-note">Happiness only changes word rewards. It never blocks building and never decays.</p>
-              <ul className="happy-bands">
-                {BANDS.map(([range, m]) => (
-                  <li key={range} className={`x${mult.toFixed(1)}` === m ? 'current' : ''}>
-                    <span>{range}</span>
-                    <span>{m}</span>
-                  </li>
-                ))}
-              </ul>
+              <p className="happy-note">Happiness is your town's mood. Tier 3 opens at 60 or more. It never blocks building, never changes what words pay, and never decays.</p>
             </div>
           )}
         </li>
