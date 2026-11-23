@@ -20,6 +20,7 @@ import { flushAutosave, markTutorialDone, setTutorialPause } from './persistence
 import {
   currentSave,
   foundTownCenterAt,
+  grantPieces,
   hooks,
   loadSavedGame,
   panCameraTo,
@@ -225,6 +226,8 @@ function go(frame: FrameId): void {
       break;
     case 'road':
       keepWallet('road');
+      // (v3.0.2) The town gives the first road piece, so the step teaches laying from Roads.
+      if (store.state.roadBank[3] + store.state.roadBank[4] + store.state.roadBank[5] === 0) grantPieces('road', 3, 1);
       setTool('road');
       focusFoot(COTTAGE_FOOT, ROAD_START);
       break;
