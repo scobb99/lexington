@@ -605,7 +605,8 @@ function checkV3(d: Record<string, unknown>): SaveData {
     flowers.push([fx, fy]);
   }
 
-  // Pieces: every tile on the map, legal ground for its kind, and no two pieces overlapping.
+  // Pieces: every tile on the map, legal ground for its kind. (v3.0.2) Pieces of the same kind may
+  // share tiles (crossings); a road and a bridge never share one. The save format is unchanged.
   if (!Array.isArray(d.pieces)) fail('This save is damaged: the road piece list is missing.');
   const pieces: SavedPiece[] = [];
   const occupiedByPiece = new Uint8Array(TILE_COUNT);
@@ -622,8 +623,9 @@ function checkV3(d: Record<string, unknown>): SaveData {
     for (const tt of pieceTiles(sp)) {
       if (tt.x < 0 || tt.y < 0 || tt.x >= MAP_W || tt.y >= MAP_H) fail('This save is damaged: a road piece runs off the map.');
       const i = tt.y * MAP_W + tt.x;
-      if (occupiedByPiece[i]) fail('This save is damaged: two road pieces overlap.');
-      occupiedByPiece[i] = 1;
+      const kindCode = sp.kind === 'road' ? 1 : 2;
+      if (occupiedByPiece[i] && occupiedByPiece[i] !== kindCode) fail('This save is damaged: a road piece and a bridge piece share a tile.');
+      occupiedByPiece[i] = kindCode;
       const ok = sp.kind === 'road' ? roadAllowedOn(current[i], changed[i] === 1) : bridgeAllowedOn(current[i], changed[i] === 1);
       if (!ok) fail(sp.kind === 'road' ? 'This save is damaged: it has a road on ground that cannot take one.' : 'This save is damaged: it has a bridge on dry land.');
       if (sp.kind === 'road' && gravel.includes(i)) fail('This save is damaged: it has a road on gravel.');
