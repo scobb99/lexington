@@ -60,10 +60,10 @@ export const VARIANTS: VariantEntry[] = [
   { id: 'forest-3', type: 'forest', weight: 2, drift: 1, note: 'dense mixed stand' },
   { id: 'forest-4', type: 'forest', weight: 1, drift: -1, note: 'open, saplings and bushes' },
   // Hill.
-  { id: 'hill-1', type: 'hill', weight: 4, note: 'ochre mound with rocks' },
-  { id: 'hill-2', type: 'hill', weight: 2, note: 'small mound' },
-  { id: 'hill-3', type: 'hill', weight: 2, note: 'two mounds' },
-  { id: 'hill-4', type: 'hill', weight: 1, where: 'hillCentre', boost: 3, note: 'rockiest crag' },
+  { id: 'hill-1', type: 'hill', weight: 4, note: 'rock mound with boulders (v3.0.2 foothills)' },
+  { id: 'hill-2', type: 'hill', weight: 2, note: 'rock ledge (v3.0.2 foothills)' },
+  { id: 'hill-3', type: 'hill', weight: 2, note: 'two rock mounds (v3.0.2 foothills)' },
+  { id: 'hill-4', type: 'hill', weight: 1, where: 'hillCentre', boost: 3, note: 'rocky dome (v3.0.2 foothills)' },
   // Marsh.
   { id: 'marsh-1', type: 'marsh', weight: 4, note: 'reeds and pools' },
   { id: 'marsh-2', type: 'marsh', weight: 2, where: 'nextToWater', note: 'wettest: one big pool' },
