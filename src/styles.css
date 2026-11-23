@@ -1536,6 +1536,12 @@ h2 {
   line-height: 1.45;
 }
 
+.tutorial-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .tutorial-buttons {
   display: flex;
   gap: 8px;
@@ -1607,15 +1613,53 @@ h2 {
     max-width: none;
   }
 
+  /* (v3.0.1) Phone: smaller text, tighter spacing and a capped height, so more of the map stays
+     visible while the card is open. The body scrolls; the step line and buttons stay in view. */
   .tutorial-caption {
-    padding: 10px 12px;
-    gap: 6px;
-    max-height: 46vh;
+    padding: 8px 10px;
+    gap: 5px;
+    max-height: min(26vh, 230px);
+    overflow: hidden;
+  }
+
+  .tutorial-body {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .tutorial-step {
+    font-size: 11px;
+    letter-spacing: 0.4px;
   }
 
   .tutorial-text p {
-    font-size: 13.5px;
+    font-size: 12.5px;
+    line-height: 1.35;
+    margin: 0 0 3px;
+  }
+
+  .tutorial-caption .card-copy {
+    padding: 6px 8px;
+    gap: 1px;
+    font-size: 12px;
+  }
+
+  .tutorial-caption .card-copy .card-header {
+    font-size: 13px;
+  }
+
+  .tutorial-buttons {
+    flex: none;
+    gap: 6px;
+  }
+
+  .tutorial-buttons .pill {
+    padding: 6px 12px;
+    font-size: 13px;
   }
 
   /* With the tutorial caption showing, the bars move up to the top, under the HUD. */
