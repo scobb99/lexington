@@ -11,27 +11,29 @@
 import { Application, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { BUILDINGS } from '../game/buildings';
 import {
-  cancelPreview,
   ghostStatus,
   inspectTile,
   mapPainted,
   moveGhost,
   pendingCameraApplied,
   pinGhost,
-  previewDragTo,
-  previewSummary,
+  cancelPiece,
+  movePieceAnchor,
+  pieceStatus,
   requestRemoveAt,
+  say,
   setCamera,
   setToolTile,
   store,
   workTile,
 } from '../game/store';
 import type { Camera } from '../game/types';
+import { pieceTiles } from '../game/network';
 import type { SavedCamera } from '../game/save';
 import { createBuildingLayer, spritePlacement } from './buildingLayer';
 import { attachCamera, centredCamera, footprintDiamond, screenToTile, tileCentre, tileInMap, type Pt } from './camera';
 import { createRoadLayers } from './roadLayer';
-import { bakeTerrain, drawFlowers, loadTerrainTextures, shimmerSpots, type BakedTerrain, type TerrainTextures } from './terrainBake';
+import { bakeTerrain, drawFlowers, drawGravel, loadTerrainTextures, shimmerSpots, type BakedTerrain, type TerrainTextures } from './terrainBake';
 
 /**
  * Counters for the Section 14 checks ("Pixi Application instance count stays at 1",
@@ -40,7 +42,7 @@ import { bakeTerrain, drawFlowers, loadTerrainTextures, shimmerSpots, type Baked
  * saved town is loaded): the one terrain texture is painted again, never the stage.
  * overlayDraws counts preview, ghost and mark redraws (they never touch the terrain).
  */
-export const debugCounters = { appsCreated: 0, appsDestroyed: 0, stageBuilds: 0, terrainBakes: 0, resizes: 0, overlayDraws: 0 };
+export const debugCounters = { appsCreated: 0, appsDestroyed: 0, stageBuilds: 0, terrainBakes: 0, terrainRepaints: 0, resizes: 0, overlayDraws: 0 };
 declare global {
   interface Window {
     wordcityDebug?: typeof debugCounters & { liveApps: number };
@@ -162,6 +164,15 @@ function buildStage(
   let baked: BakedTerrain | null = null;
   const rebakeTerrain = () => {
     if (!terrainTextures || disposed) return;
+    // (v3.0) A tile change (clearing, draining, growth, overflow) repaints only the changed tiles'
+    // areas of the existing texture, in place (Sections 4, 10, 20). A load bakes the whole map.
+    const region = store.state.dirtyTiles;
+    store.state.dirtyTiles = null;
+    if (baked && region && region.length) {
+      bakeTerrain(app.renderer, store.state.terrain, store.state.cleared, terrainTextures, { into: baked, region });
+      debugCounters.terrainRepaints++;
+      return;
+    }
     const next = bakeTerrain(app.renderer, store.state.terrain, store.state.cleared, terrainTextures);
     if (baked) {
       terrainLayer.removeChild(baked.sprite);
@@ -192,7 +203,10 @@ function buildStage(
   // Clearing or draining changes the ground itself, so the terrain texture is painted again.
   const unsubscribeTiles = store.subscribe('tiles', rebakeTerrain);
 
-  const redrawFlowers = () => drawFlowers(flowerLayer, store.state.flowers, store.state.terrain.seed);
+  const redrawFlowers = () => {
+    drawFlowers(flowerLayer, store.state.flowers, store.state.terrain.seed);
+    drawGravel(flowerLayer, store.state.gravel, store.state.terrain.seed);
+  };
   redrawFlowers();
   const unsubscribeTerrain = store.subscribe('terrain', redrawFlowers);
 
@@ -314,24 +328,39 @@ function buildStage(
     const s = store.state;
     const tool = s.tool;
 
-    // Section 4: the road or bridge preview.
-    const sum = previewSummary();
-    if (sum) {
-      for (const tile of sum.tiles) {
+    // (v3.0) Section 4: a picked road or bridge piece, 60 percent opacity, green or red.
+    const ps = pieceStatus();
+    if (ps) {
+      const bad = new Set(ps.badTiles.map((t) => `${t.x},${t.y}`));
+      for (const tile of ps.tiles) {
         if (!tileInMap(tile)) continue;
-        if (tile.state === 'bad') {
-          previewLayer.lineStyle({ width: 2.5, color: BAD, alpha: 1 });
-          previewLayer.beginFill(BAD, 0.45).drawPolygon(diamond(tile.x, tile.y)).endFill();
-        } else if (tile.state === 'existing') {
-          previewLayer.lineStyle({ width: 2, color: 0xffffff, alpha: 0.7 });
-          previewLayer.beginFill(0xffffff, 0.08).drawPolygon(diamond(tile.x, tile.y, 1, 1, 0.1)).endFill();
-        } else {
-          previewLayer.lineStyle({ width: 2, color: sum.kind === 'road' ? ROAD_EDGE : 0x5a3d24, alpha: 0.6 });
-          previewLayer.beginFill(sum.kind === 'road' ? ROAD_TINT : BRIDGE_TINT, 0.6).drawPolygon(diamond(tile.x, tile.y, 1, 1, 0.06)).endFill();
-        }
+        const red = !ps.ok && (bad.size === 0 || bad.has(`${tile.x},${tile.y}`));
+        const fill = red ? BAD : ps.kind === 'road' ? ROAD_TINT : BRIDGE_TINT;
+        previewLayer.lineStyle({ width: 2.5, color: red ? BAD : ps.ok ? GHOST_OK : ROAD_EDGE, alpha: 0.9 });
+        previewLayer.beginFill(fill, 0.6).drawPolygon(diamond(tile.x, tile.y, 1, 1, 0.04)).endFill();
         previewLayer.lineStyle(0);
       }
       return;
+    }
+    // (v3.0) Section 4: a piece waiting for its removal confirmation, and what it would take with it.
+    const pr = s.pendingRemoval;
+    if (pr && pr.kind === 'piece') {
+      const piece = s.pieces.find((p) => p.id === pr.pieceId);
+      if (piece) {
+        for (const tile of pieceTiles(piece)) {
+          if (!tileInMap(tile)) continue;
+          previewLayer.lineStyle({ width: 2.5, color: BAD, alpha: 1 });
+          previewLayer.beginFill(BAD, 0.4).drawPolygon(diamond(tile.x, tile.y)).endFill();
+        }
+        for (const id of pr.cascade) {
+          const b = s.buildings.find((x) => x.id === id);
+          if (!b) continue;
+          const d = BUILDINGS[b.type];
+          previewLayer.lineStyle({ width: 3, color: BAD, alpha: 1 });
+          previewLayer.beginFill(BAD, 0.25).drawPolygon(diamond(b.x, b.y, d.w, d.h)).endFill();
+        }
+        previewLayer.lineStyle(0);
+      }
     }
 
     // Section 7: the placement ghost.
@@ -346,9 +375,10 @@ function buildStage(
       previewLayer.lineStyle({ width: g.pinned ? 3 : 2, color: g.ok ? GHOST_OK : GHOST_BAD, alpha: 0.95 });
       previewLayer.drawPolygon(diamond(g.x, g.y, def.w, def.h));
       previewLayer.lineStyle(0);
-      const tex = buildingLayer.texture(g.type);
+      const key = g.type === 'landmark' ? `landmark-${s.landmarkPick ?? 'fountain'}` : g.type;
+      const tex = buildingLayer.texture(key);
       if (tex) {
-        const at = spritePlacement(g.type, g.x, g.y, tex);
+        const at = spritePlacement(g.type, g.x, g.y, tex, key);
         ghost.texture = tex;
         ghost.anchor.set(at.anchorX, at.anchorY);
         ghost.scale.set(at.scale);
@@ -371,26 +401,9 @@ function buildStage(
   const unsubscribeRoads = store.subscribe('roads', drawPreview);
   const unsubscribeBuildings = store.subscribe('buildings', drawPreview);
   const unsubscribeResources = store.subscribe('resources', drawPreview); // green turns red when funds drop
-
-  /** Section 4: every tile the drag passes over joins the path (sampled along the pointer's move). */
-  let lastPaint: { x: number; y: number } | null = null;
-  const dragOver = (sx: number, sy: number, cam: Camera) => {
-    const from = lastPaint ?? { x: sx, y: sy };
-    const dist = Math.hypot(sx - from.x, sy - from.y);
-    const steps = Math.max(1, Math.ceil(dist / 5));
-    for (let k = 1; k <= steps; k++) {
-      const px = from.x + ((sx - from.x) * k) / steps;
-      const py = from.y + ((sy - from.y) * k) / steps;
-      previewDragTo(screenToTile(cam, px, py));
-    }
-    lastPaint = { x: sx, y: sy };
-  };
+  const unsubscribeMeta = store.subscribe('meta', drawPreview); // the removal confirmation's highlight
 
   const isBuildingTool = () => store.state.tool in BUILDINGS;
-  const pathEnd = (): Pt | null => {
-    const p = store.state.preview?.path;
-    return p && p.length ? p[p.length - 1] : null;
-  };
 
   // ---------- camera ----------
   // Section 11: a saved camera is the world point at the centre of the view, so the same save
@@ -407,19 +420,10 @@ function buildStage(
     viewSize,
     initial: saved ? fromSaved(saved) : null,
     onChange: (cam) => setCamera(cam, viewSize()),
-    // Which drags draw instead of panning: a road or bridge drag (a new path, or one that starts
-    // on the current path's end), and on touch a building drag (Section 7: the map does not pan
-    // while a building is selected on the phone). Right button and two fingers always pan.
-    paintMode: (sx, sy, cam, pointerType) => {
-      const tool = store.state.tool;
-      if (tool === 'road' || tool === 'bridge') {
-        const end = pathEnd();
-        if (!end) return true;
-        const tile = screenToTile(cam, sx, sy);
-        return tile.x === end.x && tile.y === end.y;
-      }
-      return isBuildingTool() && pointerType !== 'mouse';
-    },
+    // Which drags place instead of panning: on touch, a building drag (Section 7: the map does not
+    // pan while a building is selected on the phone). (v3.0) Road and bridge pieces are placed by
+    // taps, never drags (Section 4), so a drag always pans. Right button and two fingers always pan.
+    paintMode: (_sx, _sy, _cam, pointerType) => isBuildingTool() && pointerType !== 'mouse',
     onPaint: (phase, sx, sy, cam) => {
       const tile = screenToTile(cam, sx, sy);
       if (isBuildingTool()) {
@@ -431,18 +435,16 @@ function buildStage(
         } else if (phase === 'end') pinGhost(tile.x, tile.y);
         return;
       }
-      if (phase === 'start') {
-        lastPaint = null;
-        dragOver(sx, sy, cam);
-      } else if (phase === 'move') dragOver(sx, sy, cam);
-      else lastPaint = null; // lifting the pointer commits nothing (Section 4)
     },
     onHover: (sx, sy, cam) => {
       hoverTile = sx === null || sy === null ? null : screenToTile(cam, sx, sy);
       if (isBuildingTool()) moveGhost(hoverTile ? hoverTile.x : null, hoverTile ? hoverTile.y : null);
-      else {
+      else if (store.state.pieceGhost) {
+        // Desktop: the piece follows the pointer until a click sets its anchor (Section 4).
+        if (hoverTile && tileInMap(hoverTile)) movePieceAnchor(hoverTile);
+      } else {
         if (hoverTile && tileInMap(hoverTile)) setToolTile(hoverTile);
-        if (!store.state.preview) drawPreview();
+        drawPreview();
       }
     },
     onTap: (sx, sy, cam) => {
@@ -451,14 +453,18 @@ function buildStage(
       if (tool === 'inspect') {
         if (tileInMap(tile)) inspectTile(tile.x, tile.y);
       } else if (tool === 'remove') requestRemoveAt(tile.x, tile.y);
-      else if (tool === 'road' || tool === 'bridge') previewDragTo(tile); // a tap makes a one-tile preview
+      else if (tool === 'road' || tool === 'bridge') {
+        // Section 4: tapping a tile moves the picked piece's anchor there.
+        if (store.state.pieceGhost && tileInMap(tile)) movePieceAnchor(tile, true);
+        else if (!store.state.pieceGhost) say('Pick a piece from your bank first (or buy one).', 'info');
+      }
       else if (tool === 'clear' || tool === 'drain') workTile(tool, tile.x, tile.y);
       else if (isBuildingTool()) pinGhost(tile.x, tile.y); // a click pins the ghost
       drawPreview();
     },
-    // Section 4: a right-click while a preview is active cancels it.
+    // Section 4: a right-click while a piece ghost is active cancels it.
     onSecondaryTap: () => {
-      cancelPreview();
+      cancelPiece();
     },
   });
 
@@ -542,6 +548,7 @@ function buildStage(
         unsubscribeRoads,
         unsubscribeBuildings,
         unsubscribeResources,
+        unsubscribeMeta,
         unsubscribeMarks,
       ])
         u();
