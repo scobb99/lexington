@@ -3,8 +3,9 @@
 // Hint button, the Rune in its own slot with the letter strip, and the Reserve Shelf directly
 // above the rack (Section 10: no new screen region).
 //
-// Art placeholders (Section 3, until the Gemini pieces land): stamps and the Rune use the letter
-// tile art with a coloured corner mark; the Lantern icon is a small drawn lantern.
+// Art (v3.0.2): the Gemini overlays are in. A stamped tile carries its stamp art as a corner
+// badge (oak, granite, gilded); the Rune's slot shows the rune tile art; the Lantern icon is the
+// Gemini lantern. All three are CSS backgrounds from src/assets/ui (styles.css).
 //
 // One input model on every platform: letters enter the word only through the rack. The word box
 // is a display, never a text field, and nothing in the word area can take keyboard focus, so no
@@ -43,16 +44,9 @@ import { RARE, REROLL_MAX, minWordLength } from '../game/words';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-/** Placeholder Lantern icon (Section 3: a Gemini commission; drawn here until it lands). */
+/** The Lantern icon (v3.0.2: the Gemini lantern, src/assets/ui/lantern.png). */
 export function LanternIcon() {
-  return (
-    <svg className="lantern-icon" viewBox="0 0 16 20" width="13" height="16" aria-hidden>
-      <path d="M5 3h6M8 1v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <rect x="3.5" y="4" width="9" height="12" rx="2.5" fill="#f2c14e" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M5 18h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <circle cx="8" cy="10" r="2" fill="#fff4c2" />
-    </svg>
-  );
+  return <span className="lantern-icon" aria-hidden />;
 }
 
 const stampClass = (t: { stamp?: string }) => (t.stamp ? ` tile-stamp tile-stamp-${t.stamp}` : '');
@@ -244,7 +238,7 @@ export function Rack() {
             title={runeIn ? 'Take the Rune back' : 'The Rune: a wild letter you choose. Tap to add it to your word.'}
             aria-label="Rune tile"
           >
-            {runeIn ? rune.letter ?? '?' : 'ᚱ'}
+            {runeIn ? rune.letter ?? '?' : ''}
           </button>
         )}
       </div>
@@ -280,6 +274,13 @@ export function Rack() {
           </button>
         )}
       </div>
+      {/* (v3.0.2) The free Hint's answer stays at the rack until the rack changes. */}
+      {!swap.active && hint.longest !== null && (
+        <p className="swap-note hint-longest" data-hint-longest={hint.longest}>
+          Longest word: {hint.longest} letters
+        </p>
+      )}
+      {!swap.active && hint.pending && <p className="swap-note hint-longest hint-pending">Hint is waiting for the word list to load.</p>}
       {sw.note && <p className="swap-note">{sw.note}</p>}
       {hint.freeUsed && lanterns === 0 && !swap.active && <p className="swap-note lantern-note">{noLanternLine()}</p>}
     </div>
