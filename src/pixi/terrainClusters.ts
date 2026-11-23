@@ -151,6 +151,8 @@ export interface PeakShape {
 }
 /** Measured from the approved Gemini terrain-peak.jpg (768 x 577, base point at 63 percent). */
 export const PEAK_SHAPE: PeakShape = { aspect: 577 / 768, anchorY: 0.632 };
+/** (v3.0) Peaks keep at least this many tiles from the map edge where the patch allows. */
+export const PEAK_EDGE_MARGIN = 2;
 /** Narrowest peak for a patch that has room for one, in tiles. */
 export const PEAK_MIN_WIDTH = 2.6;
 /** Small or thin patches may go down to this so the peak stays on its own hill. */
@@ -217,7 +219,11 @@ export function peakSites(c: Clusters, shape: PeakShape = PEAK_SHAPE, keepClear?
     widths.push(PEAK_MIN_WIDTH, 2.3, PEAK_SMALL_WIDTH);
     for (const w of widths) {
       if (main) break;
-      const fit = tilesOf.find((p) => peakOverhang(c, id, p.x, p.y, w, shape, keepClear) === 0);
+      // (v3.0, Stu's art note in the LOCKED amendment) Peaks stay a tile or two in from the map
+      // edge where the patch allows: a fitting tile at least 2 tiles from every edge comes first.
+      const inner = (p: { x: number; y: number }) => Math.min(p.x, p.y, MAP_W - 1 - p.x, MAP_H - 1 - p.y) >= PEAK_EDGE_MARGIN;
+      const fits = (p: { x: number; y: number }) => peakOverhang(c, id, p.x, p.y, w, shape, keepClear) === 0;
+      const fit = tilesOf.find((p) => inner(p) && fits(p)) ?? tilesOf.find(fits);
       if (fit) main = { x: fit.x, y: fit.y, size, tiles: w, main: true };
     }
     if (!main) {
