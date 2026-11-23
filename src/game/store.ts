@@ -47,6 +47,7 @@ import {
   bridgeRunThrough,
   buildingConnected,
   cascadeFor,
+  sharedTiles,
   checkPiece,
   computeNetwork,
   emptyBank,
@@ -155,6 +156,13 @@ export interface HintState {
   freeUsed: boolean;
   guide: string | null;
   placed: number;
+  /**
+   * (v3.0.2) The free press's answer, the longest word's length, shown at the rack until the rack
+   * changes (new tiles, swap, reroll or a submitted word). Null before the free press.
+   */
+  longest: number | null;
+  /** (v3.0.2) Hint was pressed while the word list was loading; the free reveal fires when it is ready. */
+  pending: boolean;
 }
 
 /** (v3.0) Section 4: a picked road or bridge piece, before Confirm. Never saved. */
@@ -169,7 +177,17 @@ export interface PieceGhost {
 /** (v3.0) A removal waiting for its one confirmation (Sections 4 and 7). */
 export type PendingRemoval =
   | { kind: 'building'; buildingId: number; type: BuildingType; refund: Resources }
-  | { kind: 'piece'; pieceId: number; pieceKind: PieceKind; len: number; legacy: boolean; cascade: number[]; names: string[] };
+  | {
+      kind: 'piece';
+      pieceId: number;
+      pieceKind: PieceKind;
+      len: number;
+      legacy: boolean;
+      cascade: number[];
+      names: string[];
+      /** (v3.0.2) Tiles of this piece another piece also covers; they stay on the map. */
+      shared: number;
+    };
 
 /** (v3.0) Section 20: the dynamic terrain counters (saved). */
 export interface TerrainTicks {
@@ -423,7 +441,7 @@ function freshState(seedInput: unknown, opts: { sandbox?: boolean; noCenter?: bo
     resources: sandbox ? { coins: 9999, lumber: 9999, stone: 9999, knowledge: 9999, magic: 9999 } : { ...STARTING_RESOURCES },
     rack: makeTiles(drawRack(Math.random, rackSizeFor({}))),
     word: [],
-    hint: { freeUsed: false, guide: null, placed: 0 },
+    hint: { freeUsed: false, guide: null, placed: 0, longest: null, pending: false },
     swap: { active: false, selected: [] },
     shake: null,
     rerolls: 0,
@@ -699,7 +717,7 @@ export function runeInWord(): boolean {
   return store.state.word.includes(RUNE_ID);
 }
 
-const freshHint = (): HintState => ({ freeUsed: false, guide: null, placed: 0 });
+const freshHint = (): HintState => ({ freeUsed: false, guide: null, placed: 0, longest: null, pending: false });
 
 /**
  * Replaces the rack's tiles. Any change to the rack resets the Lantern hint state (Section 5) and
@@ -1202,24 +1220,41 @@ export function noLanternLine(): string {
  * Further presses spend a Lantern each to place the next letter of the guide word (never the
  * longest word), at most 2 letters per rack. The full word is never revealed.
  */
+/** The message a pressed Hint gives while the word list is still loading (v3.0.2). */
+export const HINT_PENDING_LINE = 'The word list is still loading. Your free hint will show the moment it is ready.';
+
+/**
+ * (v3.0.2) The free press: names the longest word's length, in the message line and at the rack
+ * (it stays at the rack until the rack changes). `afterLoading` when the press waited for the word
+ * list. Returns false on a dead rack.
+ */
+function revealLongest(afterLoading: boolean): boolean {
+  const s = store.state;
+  const w = longestWord(rackLetters(), minWordLength(s.tier), allWords());
+  if (!w) {
+    say(DEAD_RACK_MESSAGE, 'info');
+    recheckRack();
+    return false;
+  }
+  s.hint = { ...s.hint, freeUsed: true, longest: w.length, pending: false };
+  say(`${afterLoading ? 'The word list was still loading; it is ready now. ' : ''}You can make a ${w.length} letter word from these letters.`, 'info');
+  store.emit('word', 'meta');
+  return true;
+}
+
 export function pressHint(): void {
   const s = store.state;
   if (s.dict.status === 'loading') {
-    say('The word list is still loading. Try Hint again in a moment.', 'info');
+    // (v3.0.2) No dead end: the press waits and the free reveal fires when the list is ready.
+    s.hint = { ...s.hint, pending: true };
+    say(HINT_PENDING_LINE, 'info');
+    store.emit('word', 'meta');
     return;
   }
   if (s.swap.active) cancelSwap(false);
   const min = minWordLength(s.tier);
   if (!s.hint.freeUsed) {
-    const w = longestWord(rackLetters(), min, allWords());
-    if (!w) {
-      say(DEAD_RACK_MESSAGE, 'info');
-      recheckRack();
-      return;
-    }
-    s.hint = { ...s.hint, freeUsed: true };
-    say(`You can make a ${w.length} letter word from these letters.`, 'info');
-    store.emit('word');
+    revealLongest(false);
     return;
   }
   if (s.hint.placed >= LANTERN_LETTERS_PER_RACK) {
@@ -1796,7 +1831,7 @@ export function inspectTile(x: number, y: number): void {
 function dictionaryTestMode(): DictionaryTestMode {
   try {
     const v = new URLSearchParams(window.location.search).get('testDict');
-    return v === 'corrupt' || v === 'block' ? v : null;
+    return v === 'corrupt' || v === 'block' || v === 'slow' ? v : null;
   } catch {
     return null;
   }
@@ -1812,6 +1847,7 @@ export function startDictionary(): void {
   if (dictionaryStarted) return;
   dictionaryStarted = true;
   void loadDictionary(dictionaryTestMode()).then((d) => {
+    const hintWaiting = store.state.hint.pending; // (v3.0.2) a Hint pressed while loading
     store.state.dict = d;
     store.state.notice =
       d.status === 'fallback'
@@ -1820,7 +1856,9 @@ export function startDictionary(): void {
     if (store.state.mode !== 'title') {
       const deadRack = applyDeadRackRule();
       if (deadRack) store.state.message = { id: ++messageCounter, kind: 'info', text: deadRack };
+      if (hintWaiting && !store.state.hint.freeUsed) revealLongest(true);
     }
+    store.state.hint = { ...store.state.hint, pending: false };
     store.emit('meta', 'rack', 'word', 'message');
   });
 }
@@ -1854,11 +1892,19 @@ export function placeShowcase(): void {
   const take = (x: number, y: number, w: number, h: number) => {
     for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) free[yy * MAP_W + xx] = 1;
   };
-  const order: BuildingType[] = ['townHall', 'market', 'greenhouse', 'library', 'tavern', 'wizardTower', 'sawmill', 'quarry', 'park', 'cottage', 'pier'];
-  const placed: Building[] = [];
+  // (v3.0.2) The v3 art too: the town center (kept where it was founded), the Scribe and the six
+  // landmarks, so every sprite can be reviewed on one map.
+  const order: (BuildingType | `landmark:${LandmarkId}`)[] = [
+    'townHall', 'market', 'greenhouse', 'library', 'tavern', 'wizardTower', 'scribe', 'sawmill', 'quarry', 'park', 'cottage', 'pier',
+    ...LANDMARK_ORDER.map((id) => `landmark:${id}` as const),
+  ];
+  const placed: Building[] = s.buildings.filter((b) => b.type === 'townCenter');
+  for (const b of placed) take(b.x - 1, b.y - 1, BUILDINGS.townCenter.w + 2, BUILDINGS.townCenter.h + 2);
   const cx = MAP_W >> 1;
   const cy = MAP_H >> 1;
-  for (const type of order) {
+  for (const entry of order) {
+    const lm = entry.startsWith('landmark:') ? (entry.slice(9) as LandmarkId) : null;
+    const type: BuildingType = lm ? 'landmark' : (entry as BuildingType);
     const { w, h } = BUILDINGS[type];
     let done = false;
     for (let r = 0; r < MAP_W && !done; r++) {
@@ -1878,7 +1924,7 @@ export function placeShowcase(): void {
             if (!nearWater) continue;
           }
           take(x, y, w, h);
-          placed.push({ id: s.nextBuildingId++, type, x, y, preview: true });
+          placed.push({ id: s.nextBuildingId++, type, x, y, preview: true, ...(lm ? { landmark: lm } : {}) });
           done = true;
         }
       }
@@ -2398,7 +2444,8 @@ export function requestRemoveAt(x: number, y: number): void {
   // Section 4: the tutorial town is exempt from the cascade (Section 17).
   const cascade = s.mode === 'tutorial' ? [] : cascadeFor(s.pieces, piece.id, s.buildings);
   const names = cascade.map(buildingName);
-  s.pendingRemoval = { kind: 'piece', pieceId: piece.id, pieceKind: piece.kind, len: piece.len, legacy: !!piece.legacy, cascade: cascade.map((c) => c.id), names };
+  const shared = sharedTiles(s.pieces, piece).length;
+  s.pendingRemoval = { kind: 'piece', pieceId: piece.id, pieceKind: piece.kind, len: piece.len, legacy: !!piece.legacy, cascade: cascade.map((c) => c.id), names, shared };
   say(removalWarning(s.pendingRemoval), 'warn');
   store.emit('meta', 'preview');
 }
@@ -2413,9 +2460,11 @@ export function removalWarning(p: PendingRemoval): string {
   const back = p.legacy
     ? `This ${what} tile is from before road pieces, so nothing returns to a bank.`
     : `The piece returns to your bank.`;
-  if (!p.names.length) return `Remove this ${p.legacy ? '' : p.len + ' tile '}${what} ${p.legacy ? 'tile' : 'piece'}? ${back}`.replace('  ', ' ');
+  // (v3.0.2) Crossing tiles another piece also covers stay on the map.
+  const stays = p.shared ? ` ${p.shared === 1 ? '1 of its tiles is' : `${p.shared} of its tiles are`} shared with another piece and will stay.` : '';
+  if (!p.names.length) return `Remove this ${p.legacy ? '' : p.len + ' tile '}${what} ${p.legacy ? 'tile' : 'piece'}? ${back}${stays}`.replace('  ', ' ');
   const n = p.names.length;
-  return `Removing this piece will also remove ${n} building${n === 1 ? '' : 's'}: ${p.names.join(', ')}. Buildings removed this way are gone. ${back}`;
+  return `Removing this piece will also remove ${n} building${n === 1 ? '' : 's'}: ${p.names.join(', ')}. Buildings removed this way are gone. ${back}${stays}`;
 }
 
 export function confirmRemoval(): void {
