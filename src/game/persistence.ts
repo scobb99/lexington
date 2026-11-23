@@ -1,4 +1,4 @@
-// Saving to the browser (Build Spec v2.0, Section 11).
+// Saving to the browser (Build Spec v3.0, Section 11).
 //
 // - IndexedDB through the idb-keyval library (Boone ruling: not localStorage, which blocks the
 //   main thread and is too small for a full city).
@@ -412,7 +412,7 @@ export async function continueTown(): Promise<boolean> {
   loadSavedGame(got.save, 'Welcome back! Your town is just as you left it.', got.notes);
   startAutosave();
   // A migrated save is written back in the new format straight away.
-  if (got.notes.marshRoadsToBridges > 0) await flushAutosave();
+  if (got.notes.marshRoadsToBridges > 0 || got.notes.foundedCenter) await flushAutosave();
   return true;
 }
 
