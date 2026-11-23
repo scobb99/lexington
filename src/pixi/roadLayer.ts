@@ -13,7 +13,7 @@
 
 import { Container, Graphics, Rectangle, Sprite, type IRenderer, type Texture } from 'pixi.js';
 import { store } from '../game/store';
-import { AXIS_EW, LINK_BRIDGE, LINK_ROAD, neighbourMask, N, E, S, W } from '../game/roads';
+import { AXIS_BOTH, AXIS_EW, LINK_BRIDGE, LINK_ROAD, neighbourMask, N, E, S, W } from '../game/roads';
 import { MAP_W, TILE_H, TILE_W } from '../game/types';
 import { tileCentre } from './camera';
 
@@ -113,7 +113,15 @@ export function createRoadLayers(parent: Container, renderer: IRenderer): RoadLa
   };
   const roadTex: Texture[] = [];
   for (let m = 0; m < 16; m++) roadTex.push(make((g) => drawRoadVariant(g, m)));
-  const bridgeTex: Record<number, Texture> = { 1: make((g) => drawBridge(g, 1)), 2: make((g) => drawBridge(g, 2)) };
+  // (v3.0.2) A bridge crossing draws both decks: the plainest honest look for a bridge junction.
+  const bridgeTex: Record<number, Texture> = {
+    1: make((g) => drawBridge(g, 1)),
+    2: make((g) => drawBridge(g, 2)),
+    3: make((g) => {
+      drawBridge(g, 1);
+      drawBridge(g, 2);
+    }),
+  };
 
   const roadSprites = new Map<number, Sprite>();
   const bridgeSprites = new Map<number, Sprite>();
@@ -143,7 +151,7 @@ export function createRoadLayers(parent: Container, renderer: IRenderer): RoadLa
         place(roadSprites, roads, i, roadTex[neighbourMask(i % MAP_W, Math.floor(i / MAP_W), isLink)]);
       } else if (links[i] === LINK_BRIDGE) {
         liveBridges.add(i);
-        place(bridgeSprites, bridges, i, bridgeTex[bridgeAxis[i] === AXIS_EW ? 2 : 1]);
+        place(bridgeSprites, bridges, i, bridgeTex[bridgeAxis[i] === AXIS_BOTH ? 3 : bridgeAxis[i] === AXIS_EW ? 2 : 1]);
       }
     }
     for (const [pool, live] of [
@@ -171,6 +179,7 @@ export function createRoadLayers(parent: Container, renderer: IRenderer): RoadLa
       for (const t of roadTex) t.destroy(true);
       bridgeTex[1].destroy(true);
       bridgeTex[2].destroy(true);
+      bridgeTex[3].destroy(true);
     },
   };
 }
