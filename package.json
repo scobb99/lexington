@@ -1,7 +1,7 @@
 {
   "name": "lexington",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Lexington: a cozy word-driven city builder (Build Spec v2.0).",
   "type": "module",
   "engines": {
