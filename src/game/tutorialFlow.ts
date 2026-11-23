@@ -23,6 +23,7 @@ import {
   hooks,
   loadSavedGame,
   panCameraTo,
+  placeBuildingAt,
   setMarks,
   setOrders,
   setRackLetters,
@@ -40,7 +41,9 @@ import {
   FRAMES,
   LAND_LABELS,
   OFF_PLOT_REASON,
+  PLOT_PIECE_REASON,
   ROAD_PIECE_COINS,
+  SAWMILL_SAVED_REASON,
   ROAD_START,
   SAWMILL_PLOT,
   SAWMILL_ROAD_START,
@@ -53,7 +56,9 @@ import {
   landLabelTiles,
   type FrameId,
 } from './tutorial';
-import { TILE_H, TILE_W, MAP_H, type Building, type Resources, type Tool } from './types';
+import { pieceTiles, type Piece } from './network';
+import type { Pt } from './roads';
+import { TILE_H, TILE_W, MAP_H, MAP_W, type Building, type Resources, type Tool } from './types';
 
 export interface TutorialView {
   active: boolean;
@@ -62,11 +67,13 @@ export interface TutorialView {
   retry: boolean;
   /** The build steps: a Cottage or Sawmill stands off the marked plot (safety net). */
   offPlot: boolean;
+  /** (v3.0.1) The build steps: a road or bridge piece lies on the marked plot (safety net). */
+  plotBlocked: boolean;
   /** Where the tutorial was started from (the menu returns the player to their town). */
   from: 'title' | 'town';
 }
 
-let view: TutorialView = { active: false, frame: 'welcome', retry: false, offPlot: false, from: 'title' };
+let view: TutorialView = { active: false, frame: 'welcome', retry: false, offPlot: false, plotBlocked: false, from: 'title' };
 let realTown: SaveData | null = null;
 const listeners = new Set<() => void>();
 
@@ -141,8 +148,65 @@ function firstOrders(): Order[] {
   ];
 }
 
+/** (v3.0.1) The marked plots as footprints (origin and size). */
+const COTTAGE_FOOT = { ...COTTAGE_PLOT, w: BUILDINGS.cottage.w, h: BUILDINGS.cottage.h };
+const SAWMILL_FOOT = { ...SAWMILL_PLOT, w: BUILDINGS.sawmill.w, h: BUILDINGS.sawmill.h };
+type Foot = typeof COTTAGE_FOOT;
+
+function inFoot(t: Pt, f: Foot): boolean {
+  return t.x >= f.x && t.x < f.x + f.w && t.y >= f.y && t.y < f.y + f.h;
+}
+
+/**
+ * (v3.0.1) Centres the camera on a footprint, in the part of the map the card leaves visible. In
+ * a step that also lays a road from a marked start tile, the camera centres between the plot and
+ * that tile, so both stay on screen.
+ */
+function focusFoot(f: Foot, start?: Pt): void {
+  const cx = f.x + (f.w - 1) / 2;
+  const cy = f.y + (f.h - 1) / 2;
+  if (start) panCameraTo((cx + start.x) / 2, (cy + start.y) / 2);
+  else panCameraTo(cx, cy);
+}
+
+/**
+ * (v3.0.1) The plots a road or bridge piece may not cover in this frame, with the reason. The
+ * first road step keeps both the Cottage plot and the Sawmill's future plot clear; the Sawmill
+ * step keeps its own plot clear.
+ */
+function reservedFor(frame: FrameId): { foot: Foot; reason: string }[] {
+  if (frame === 'road') return [{ foot: COTTAGE_FOOT, reason: PLOT_PIECE_REASON }, { foot: SAWMILL_FOOT, reason: SAWMILL_SAVED_REASON }];
+  if (frame === 'sawmill') return [{ foot: SAWMILL_FOOT, reason: PLOT_PIECE_REASON }];
+  return [];
+}
+
+/** (v3.0.1) A piece on the map whose tiles cover the plot of the current build step. */
+function pieceOnPlot(): Piece | null {
+  const want = wantedFoot();
+  if (!want) return null;
+  return store.state.pieces.find((p) => pieceTiles(p).some((t) => inFoot(t, want))) ?? null;
+}
+
+function wantedFoot(): Foot | null {
+  if (view.frame === 'cottage') return COTTAGE_FOOT;
+  if (view.frame === 'sawmill') return SAWMILL_FOOT;
+  return null;
+}
+
+/**
+ * (v3.0.1) The one-tap assist in the build steps: places the step's building on its marked plot
+ * through the normal placement (same checks, cost and message). The step's wallet cover already
+ * guarantees the funds. Returns whether it was placed.
+ */
+export function placeOnMarkedPlot(): boolean {
+  const want = wantedPlot();
+  if (!view.active || !want) return false;
+  keepWallet(want.type);
+  return placeBuildingAt(want.type, want.x, want.y);
+}
+
 function go(frame: FrameId): void {
-  setView({ frame, retry: false, offPlot: false });
+  setView({ frame, retry: false, offPlot: false, plotBlocked: false });
   setTutorialLocks(locksFor(frame));
   setMarks(marksFor(frame));
   switch (frame) {
@@ -162,11 +226,13 @@ function go(frame: FrameId): void {
     case 'road':
       keepWallet('road');
       setTool('road');
-      panCameraTo(COTTAGE_PLOT.x, COTTAGE_PLOT.y + 2);
+      focusFoot(COTTAGE_FOOT, ROAD_START);
       break;
     case 'cottage':
       keepWallet('cottage');
       setTool('cottage');
+      setView({ plotBlocked: !!pieceOnPlot() });
+      focusFoot(COTTAGE_FOOT);
       break;
     case 'cottageDone':
     case 'sawmillDone':
@@ -175,7 +241,8 @@ function go(frame: FrameId): void {
     case 'sawmill':
       keepWallet('sawmill');
       setTool('road');
-      panCameraTo(SAWMILL_PLOT.x, SAWMILL_PLOT.y);
+      setView({ plotBlocked: !!pieceOnPlot() });
+      focusFoot(SAWMILL_FOOT, SAWMILL_ROAD_START);
       break;
     case 'pay':
     case 'word':
@@ -212,6 +279,22 @@ function keepWallet(step: 'road' | 'cottage' | 'sawmill'): void {
     }
   }
   if (changed) setResources(next);
+}
+
+/** (v3.0.1) A connected road or bridge tile sits beside the Cottage plot. */
+function cottagePlotHasRoad(): boolean {
+  const s = store.state;
+  return [
+    [0, -1],
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+  ].some(([dx, dy]) => {
+    const x = COTTAGE_PLOT.x + dx;
+    const y = COTTAGE_PLOT.y + dy;
+    const i = y * MAP_W + x;
+    return s.pieceAt[i] > 0 && s.net[i] === 1;
+  });
 }
 
 function adjacentToCottagePlot(t: { x: number; y: number }): boolean {
@@ -275,9 +358,38 @@ function attachHooks(): void {
     const want = wantedPlot();
     return want && type === want.type && (x !== want.x || y !== want.y) ? OFF_PLOT_REASON : null;
   };
-  // Remove acts only on a building placed off its plot, so it can't take away a road piece the
-  // step needs or a building the tutorial still needs.
-  hooks.removeGuard = (_x, _y, b) => (wantedPlot() && !(b && !onItsPlot(b)) ? TUTORIAL_REMOVE_ONLY : null);
+  // Remove acts only on a building placed off its plot, or (v3.0.1 safety net) on a road or bridge
+  // piece lying on the step's marked plot, so it can't take away a road piece the step needs or a
+  // building the tutorial still needs.
+  hooks.removeGuard = (_x, _y, b, piece) => {
+    const want = wantedFoot();
+    if (!want) return null;
+    if (b) return onItsPlot(b) ? TUTORIAL_REMOVE_ONLY : null;
+    if (piece && pieceTiles(piece).some((t) => inFoot(t, want))) return null;
+    return TUTORIAL_REMOVE_ONLY;
+  };
+  // (v3.0.1) The road steps: a piece may not cover a marked plot (the Step 9 soft-lock fix).
+  hooks.pieceGuard = (tiles) => {
+    for (const r of reservedFor(view.frame)) {
+      const over = tiles.filter((t) => inFoot(t, r.foot));
+      if (over.length) return { tiles: over, reason: r.reason };
+    }
+    return null;
+  };
+  hooks.onPieceRemoved = () => {
+    const want = wantedPlot();
+    if (!want) return;
+    const blocked = !!pieceOnPlot();
+    setView({ plotBlocked: blocked });
+    // If the piece that went was the Cottage's only road, the Cottage step can't be finished
+    // (it has no road tool), so the tutorial steps back to the road step with the piece banked.
+    if (!blocked && want.type === 'cottage' && !cottagePlotHasRoad()) {
+      go('road');
+      return;
+    }
+    keepWallet(want.type);
+    if (!blocked) setTool(want.type);
+  };
   hooks.onRemoved = (b) => {
     const want = wantedPlot();
     if (!want || b.type !== want.type) return;
@@ -296,6 +408,8 @@ function detachHooks(): void {
   hooks.placementGuard = undefined;
   hooks.removeGuard = undefined;
   hooks.onRemoved = undefined;
+  hooks.onPieceRemoved = undefined;
+  hooks.pieceGuard = undefined;
 }
 
 /**
