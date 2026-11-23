@@ -1,4 +1,4 @@
-// Tiers and quests (Build Spec v1.8, Section 9). Pure rules: no React, no Pixi, no store.
+// Tiers and quests (Build Spec v3.0, Section 9; the quest chain is re-pointed in v3.0). Pure rules: no React, no Pixi, no store.
 //
 // Tiers unlock when every requirement is met and never relock. Quests are optional,
 // permanent and never expire; completing one pays a fixed reward and reveals the next.
@@ -28,6 +28,10 @@ export interface ProgressInputs {
   validWords: number;
   /** Valid words of 7 letters or more (lifetime). */
   longWords: number;
+  /** (v3.0) Commission orders completed (lifetime). */
+  ordersCompleted: number;
+  /** (v3.0) Valid words played through a stamped tile (lifetime). */
+  stampedWords: number;
 }
 
 export interface Requirement {
@@ -74,7 +78,7 @@ export function tierAfterCheck(current: Tier, p: ProgressInputs): Tier {
 }
 
 export const TIER_UNLOCKS: Record<2 | 3, string> = {
-  2: 'Market, Library and Pier are now available. Words now need at least 4 letters.',
+  2: 'Market, Library, Pier and Scribe are now available. Words now need at least 4 letters.',
   3: 'Town Hall, Park, Greenhouse, Tavern and Wizard Tower are now available.',
 };
 
@@ -93,7 +97,11 @@ export interface Quest {
   progress: (p: ProgressInputs) => Requirement[];
 }
 
-/** Section 9: the quest chain, in order. */
+/**
+ * Section 9 (v3.0): the re-pointed quest chain, in order. Under material separation quest rewards
+ * pay only Coins, Knowledge and Magic (First Home and Working Town moved to Coins, proposed);
+ * First Commission and Stamped are new (proposed) and replace Place of Learning and Long Word.
+ */
 export const QUESTS: Quest[] = [
   {
     title: 'First Words',
@@ -104,7 +112,7 @@ export const QUESTS: Quest[] = [
   {
     title: 'First Home',
     goal: 'Build a Cottage.',
-    reward: reward({ lumber: 10 }),
+    reward: reward({ coins: 10 }),
     progress: (p) => [req('Cottages built', p.everBuilt.cottage ?? 0, 1)],
   },
   {
@@ -116,7 +124,7 @@ export const QUESTS: Quest[] = [
   {
     title: 'Working Town',
     goal: 'Build a Sawmill and a Quarry.',
-    reward: reward({ stone: 15 }),
+    reward: reward({ coins: 15 }),
     progress: (p) => [req('Sawmill built', Math.min(1, p.everBuilt.sawmill ?? 0), 1), req('Quarry built', Math.min(1, p.everBuilt.quarry ?? 0), 1)],
   },
   {
@@ -126,16 +134,16 @@ export const QUESTS: Quest[] = [
     progress: (p) => [req('Population', p.population, 15)],
   },
   {
-    title: 'Place of Learning',
-    goal: 'Build a Library.',
-    reward: reward({ knowledge: 10 }),
-    progress: (p) => [req('Libraries built', p.everBuilt.library ?? 0, 1)],
+    title: 'First Commission',
+    goal: 'Complete 3 Commission orders at the town center.',
+    reward: reward({ coins: 15 }),
+    progress: (p) => [req('Commissions completed', p.ordersCompleted, 3)],
   },
   {
-    title: 'Long Word',
-    goal: 'Submit a word of 7 letters or more.',
-    reward: reward({ magic: 5 }),
-    progress: (p) => [req('Words of 7+ letters', p.longWords, 1)],
+    title: 'Stamped',
+    goal: 'Submit a valid word that uses a stamped tile.',
+    reward: reward({ knowledge: 10 }),
+    progress: (p) => [req('Words through a stamped tile', p.stampedWords, 1)],
   },
   {
     title: 'Town Hall',
