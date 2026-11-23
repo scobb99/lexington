@@ -204,15 +204,27 @@ export interface BakedTerrain {
   texture: RenderTexture;
 }
 
+/** (v3.0) Section 2: grid lines are 1 pixel, black at 10 percent (proposed), baked with the terrain. */
+export const GRID_ALPHA = 0.1;
+
+/** How far (in tiles) a repaint reaches around a changed tile: its blends and props spill this far. */
+const REPAINT_REACH = 2.6;
+
+/**
+ * Bakes the terrain into one RenderTexture (Section 10). With `into` and `region`, it repaints only
+ * the area around the listed tiles inside the existing texture, in place (Sections 4, 10 and 20:
+ * clearing, draining, growth and overflow repaint the changed tiles' areas; never a whole rebake).
+ */
 export function bakeTerrain(
   renderer: IRenderer,
   map: TerrainMap,
   cleared: Uint8Array,
   tex: TerrainTextures,
+  opts: { into?: BakedTerrain; region?: number[] } = {},
 ): BakedTerrain {
   const resolution = bakeResolution(renderer);
   const height = WORLD_H + BAKE_PAD_TOP + EDGE_DEPTH + 4;
-  const texture = RenderTexture.create({ width: WORLD_W, height, resolution });
+  const texture = opts.into ? opts.into.texture : RenderTexture.create({ width: WORLD_W, height, resolution });
   const rand = mulberry32(map.seed ^ 0x150);
   const order = depthOrder();
   const tiles = effectiveTiles(map.tiles, cleared);
@@ -503,6 +515,40 @@ export function bakeTerrain(
   }
   root.addChild(props);
 
+  // ---- (v3.0) Section 2: faint grid lines on every tile edge, the one exception to the soft look.
+  const grid = new Graphics();
+  grid.lineStyle({ width: 1, color: 0x000000, alpha: GRID_ALPHA });
+  const corner = gridToWorld;
+  for (let k = 0; k <= MAP_W; k++) {
+    const a = corner(k, 0);
+    const b = corner(k, MAP_H);
+    grid.moveTo(a.x, a.y).lineTo(b.x, b.y);
+  }
+  for (let k = 0; k <= MAP_H; k++) {
+    const a = corner(0, k);
+    const b = corner(MAP_W, k);
+    grid.moveTo(a.x, a.y).lineTo(b.x, b.y);
+  }
+  root.addChild(grid);
+
+  if (opts.into && opts.region) {
+    // Repaint in place: only the changed tiles' areas are drawn over the existing texture.
+    const mask = new Graphics().beginFill(0xffffff);
+    for (const i of opts.region) {
+      const c = tileCentre(i % MAP_W, Math.floor(i / MAP_W));
+      const w = (TILE_W / 2) * REPAINT_REACH;
+      const hh = (TILE_H / 2) * REPAINT_REACH;
+      // The area reaches higher above the tile than below it, for the props that stand on it.
+      mask.drawPolygon([c.x, c.y - hh - TILE_H * 1.5, c.x + w, c.y, c.x, c.y + hh, c.x - w, c.y]);
+    }
+    mask.endFill();
+    root.addChild(mask);
+    root.mask = mask;
+    renderer.render(root, { renderTexture: texture, clear: false });
+    root.destroy({ children: true });
+    return opts.into;
+  }
+
   renderer.render(root, { renderTexture: texture, clear: true });
   root.destroy({ children: true });
 
@@ -531,6 +577,30 @@ export function drawFlowers(g: Graphics, flowers: { x: number; y: number }[], se
       g.beginFill(COLORS.shadow, 0.18).drawCircle(x, y + 0.8, 2).endFill();
       g.beginFill(COLORS.flowers[k % COLORS.flowers.length]).drawCircle(x, y, 1.8).endFill();
       g.beginFill(0xf2c94c).drawCircle(x, y, 0.6).endFill();
+    }
+  }
+}
+
+/**
+ * (v3.0) Section 20: flood gravel deposits, on the same small live layer as the flowers.
+ * PLACEHOLDER art (a scatter of grey stones) until a Gemini gravel piece is drawn.
+ */
+export function drawGravel(g: Graphics, gravel: Uint8Array, seed: number): void {
+  for (let i = 0; i < gravel.length; i++) {
+    if (!gravel[i]) continue;
+    const x0 = i % MAP_W;
+    const y0 = Math.floor(i / MAP_W);
+    const rand = mulberry32(seed ^ (x0 * 2654435761) ^ (y0 * 40503));
+    const c = tileCentre(x0, y0);
+    g.beginFill(0x8f877a, 0.55).drawEllipse(c.x, c.y, TILE_W * 0.34, TILE_H * 0.3).endFill();
+    for (let k = 0; k < 14; k++) {
+      const u = rand() - 0.5;
+      const v = rand() - 0.5;
+      const x = c.x + (u - v) * TILE_W * 0.5;
+      const y = c.y + (u + v) * TILE_H * 0.5;
+      const r = 1.6 + rand() * 2.2;
+      g.beginFill(COLORS.shadow, 0.2).drawEllipse(x, y + 1, r * 1.2, r * 0.7).endFill();
+      g.beginFill(k % 3 === 0 ? 0xb8b0a2 : k % 3 === 1 ? 0x9c9486 : 0xcdc6b8).drawEllipse(x, y, r, r * 0.7).endFill();
     }
   }
 }
