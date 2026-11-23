@@ -1642,3 +1642,390 @@ h2 {
   object-fit: contain;
   flex: none;
 }
+
+/* ======================================================================
+   v3.0 additions: road and bridge pieces, orders, Lanterns, stamps, Rune,
+   Reserve Shelf, landmarks, High Street notes. Stamp, Rune and Lantern
+   looks are placeholders until the Gemini art lands (see the build note).
+   ====================================================================== */
+
+/* ---------- build head and orders button ---------- */
+.build-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.build-head h2 {
+  margin: 0;
+}
+
+.orders-button {
+  border-color: var(--gold);
+}
+
+/* ---------- piece banks (Section 4) ---------- */
+.piece-bank {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.piece-bank h3,
+.landmarks-row h3 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 15px;
+  color: var(--gold);
+}
+
+.piece-bank ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bank-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bank-row .pill {
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.bank-pick {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.bank-buy {
+  flex: 1 1 auto;
+}
+
+.piece-bar {
+  max-width: min(460px, calc(100% - 24px));
+}
+
+.cost-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.rotate-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rotate-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------- removal cascade warning ---------- */
+.confirm-cascade {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+/* ---------- landmarks ---------- */
+.landmarks-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+}
+
+.landmarks-row h3,
+.landmarks-row .tool-hint {
+  flex-basis: 100%;
+}
+
+/* ---------- town notes (High Street, not connected) ---------- */
+.town-notes {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.town-notes p {
+  margin: 6px 0 0;
+}
+
+.town-notes .disconnected {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--warn);
+}
+
+/* ---------- Commission orders panel (Section 18) ---------- */
+.orders-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  width: min(340px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--gold);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.orders-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.orders-head h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--gold);
+}
+
+.orders-summary,
+.orders-discard {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.orders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.order {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel-hover);
+}
+
+.order-cond {
+  margin: 0;
+  font-weight: 800;
+}
+
+.order-reward {
+  margin: 0;
+  font-size: 13px;
+  grid-column: 1;
+}
+
+.order-discard {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  padding: 5px 10px;
+  font-size: 12.5px;
+}
+
+/* ---------- Lanterns (Section 5) ---------- */
+.hint-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lantern-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.lantern-icon {
+  color: #5a4326;
+  flex: none;
+}
+
+.lantern-note {
+  color: var(--muted);
+}
+
+/* ---------- stamps (Section 19, placeholder corner marks) ---------- */
+.tile-stamp {
+  position: relative;
+}
+
+.tile-stamp::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1.5px solid rgba(40, 28, 18, 0.7);
+  pointer-events: none;
+}
+
+.tile-stamp-oak::after {
+  background: #6f9a3e;
+}
+
+.tile-stamp-granite::after {
+  background: #9aa0a6;
+}
+
+.tile-stamp-gilded::after {
+  background: #f0c24a;
+  box-shadow: 0 0 6px rgba(240, 194, 74, 0.8);
+}
+
+.word-letter.tile-stamp::after {
+  width: 8px;
+  height: 8px;
+  top: 2px;
+  right: 2px;
+}
+
+/* ---------- the Rune (placeholder glyph tile) ---------- */
+.tile-rune {
+  background: linear-gradient(160deg, #6a54b8, #3d2f78);
+  color: #f1e9ff;
+  border: 1px solid var(--magic);
+  box-shadow: 0 0 8px rgba(183, 156, 240, 0.45);
+}
+
+.word-letter.tile-rune {
+  background: linear-gradient(160deg, #6a54b8, #3d2f78);
+  color: #f1e9ff;
+}
+
+.rune-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.rune-letter {
+  width: 26px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-hover);
+  color: var(--cream);
+  font-weight: 800;
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.rune-letter-on {
+  border-color: var(--magic);
+  background: #4a3a7d;
+}
+
+/* ---------- Reserve Shelf (Section 7 and 19) ---------- */
+.shelf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shelf-label {
+  font-family: var(--font-head);
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.shelf-slot {
+  width: 40px;
+  height: 44px;
+  flex: none;
+}
+
+.shelf-empty {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1.5px dashed var(--panel-line);
+}
+
+.shelf-armed .shelf-slot {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.shelf-locked .shelf-slot {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.shelf-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+/* ---------- phone 390 x 844 ---------- */
+@media (max-width: 767px) {
+  .orders-desktop {
+    display: none;
+  }
+
+  .orders-panel {
+    top: 104px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: calc(100% - 120px);
+  }
+
+  .orders-button {
+    padding: 8px 14px;
+  }
+
+  .rack-tiles .tile-rune {
+    max-width: 40px;
+  }
+
+  .rune-letter {
+    width: 24px;
+    height: 26px;
+  }
+
+  .shelf-slot {
+    width: 36px;
+    height: 38px;
+    font-size: 19px;
+  }
+
+  .bank-row .pill {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .piece-bar {
+    bottom: 8px;
+    width: calc(100% - 16px);
+  }
+}
