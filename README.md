@@ -1,80 +1,61 @@
 # Lexington
 
-A cozy, word-driven city builder. Built to **Build Spec v2.0** (with the amendment naming the game Lexington).
+A cozy, word-driven city builder. Built to **Build Spec v3.0** with the Nov 22, 2026 lock amendment.
 
-**Status: v2.0 is built.** New in v2.0:
+**Status: v3.0.0 is built.** What changed from v2:
 
-- **Title screen** with Continue, New Town, How to Play and Saves.
-- **How to Play:** a two-minute guided first town (11 steps, on the fixed map "hearth"). It never touches your saved town.
-- **Roads and bridges are previewed first.** You draw, see the total, then tap **Confirm**. Nothing is charged while drawing.
-- **Building ghost:** a see-through building shows where it will go. Green means it can go there; red says why not. Nothing is charged until **Confirm**.
-- **Build cards** say what each building costs, what it does, and where it can go.
-- **One way to spell:** tap letter tiles (or type on a computer keyboard). The word box is never a text box, so a phone keyboard never pops up.
-- **Word tools:**
-  - a **delete** key: tap to remove the last letter, hold to clear the word;
-  - **Hint:** free, three steps from length to the full word;
-  - **Swap:** 2 Coins a tile.
-- **Changing the land:**
-  - **Clear** thicket for 6 Coins and 3 Lumber a tile.
-  - **Drain** marsh into meadow from Tier 2, for 5 Coins and 2 Lumber a tile.
-  - Marsh now needs a **bridge** to cross.
-- **New economy:** production buildings pay more and carry the town (Section 6).
-- **Prettier ground:**
-  - softer edges where land meets water and marsh;
-  - forests read as one canopy;
-  - big hills get a peak;
-  - buildings sit on soft shadows.
-- **Gemini art** for the game icon, the letter tiles, the resource icons, and the river (four water styles).
+- **Words pay Coins, Knowledge and Magic only.** Lumber and Stone come from buildings, Workshop stamps and Commission orders.
+- **Town center:** every town starts with one in the middle. It is free, it can't be removed, and every road must connect back to it.
+- **Commission orders:** three orders at the town center ("a word with two E's", "a 6 letter word"...). Spell one and it pays a lump of what you need most. Orders never expire; a free discard comes every 5 words.
+- **Road and bridge pieces:** buy pieces of 3, 4 or 5 tiles into a bank, then lay them. Laying is free; a removed piece goes back to the bank whole.
+- **Growing Rack:** 6 letters to start; 7 at your 2nd Cottage, 8 at your 4th, 9 at the Town Hall.
+- **Lantern Hints:** the first Hint on a rack is free and tells you the longest word's length. After that, each Lantern places a letter of a helpful word (two per rack at most). You hold up to 3.
+- **Workshop stamps:** a connected Sawmill, Quarry or Market marks a rack tile. Use that tile in a word for 4 extra Lumber or Stone, or double Coins.
+- **New helpers:** the **Scribe** (a Reserve Shelf above the rack to keep one letter), the **Rune** from the Wizard Tower (a wild letter you choose), and the **High Street** (a straight road with different buildings beside it makes words pay as if longer).
+- **Landmarks:** earned, not bought, at building milestones and other firsts. Each one placed adds 2 to happiness.
+- **Living land:** every 20 words forests and thickets may creep onto open meadow; every 50 words the water may flood low meadow into marsh, sometimes leaving a gravel tile (clear it free for 3 Stone).
+- **Faint grid lines** on the map, so tiles are easier to read.
+- **A new How to Play** (14 steps) that teaches all of the above.
 
 ## How to play (controls)
 
 ### Starting
 
 - **Continue:** back to your town, just as you left it. It only shows when there is a saved town.
-- **New Town:** a fresh map. If you already have a saved town, type **NEW** to confirm, because the autosave is replaced. Your three save slots are kept. You can type a map seed, or leave it empty for a surprise map.
+- **New Town:** a fresh map with its town center. If you already have a saved town, type **NEW** to confirm, because the autosave is replaced. Your three save slots are kept.
 - **How to Play:** the tutorial. You can **Skip tutorial** at any step.
 - **Saves:** load a slot, export a slot to a file, or import a town file.
 
 ### On a computer
 
 - **Look around:** drag the map, or scroll to zoom.
-- **Spell a word:** click letter tiles, or just type letters on the keyboard; nothing needs to be selected first.
-  - **Backspace** removes the last letter.
-  - **Enter** plays the word.
-  - Click a letter in the word box to take that one back.
-- **Hint:** click once to hear the length, twice to place the first letter, three times to see the word.
-- **Swap:** click **Swap**, click the tiles you want to replace, then click **Swap 3 tiles for 6 Coins** (the button shows the count). **Cancel** or **Esc** gets out of it free.
-- **Road:**
-  1. Click **Road**.
-  2. Drag across land. The path shows see-through; a red tile can't take a road, and the bar says why.
-  3. Click **Confirm**, or press **Enter**.
+- **Spell a word:** click letter tiles, or just type letters. **Backspace** removes the last letter, **Enter** plays the word.
+- **Hint:** the first click on a rack is free. Each click after that spends a Lantern and places a letter.
+- **Orders:** click **Orders** (beside "Build") to see the three Commission orders.
+- **Roads and bridges:**
+  1. Click **Road** (or **Bridge**). The bank opens.
+  2. Click **Buy** on a length to buy a piece (charged once). Then click the piece in the bank.
+  3. Move the mouse over the map and click where the piece should start.
+  4. Click **Rotate** until it points the way you want. Green means it can go there; red says why not.
+  5. Click **Confirm** (or press **Enter**). Laying a piece costs nothing.
 
-  **Cancel**, **Esc** or a right-click throws the path away for free. To add more, start a new drag from the end of the path.
-- **Bridge:** same as Road, over water or marsh.
-- **Clear / Drain:** click the tool, then click one tile at a time. The panel shows the cost of the tile under the mouse.
-- **Place a building:**
-  1. Click its card. The ghost follows the mouse.
-  2. Click to pin it.
-  3. Click **Confirm**, or press **Enter**.
-
-  **Cancel** unpins it; **Esc** stops placing.
-- **Menu** (top right): Saves, How to Play, and Title Screen. Both of the last two save your town first.
+  **Cancel**, **Esc** or a right-click puts the piece back in the bank.
+- **Remove:** click **Remove**, then a piece or building. If removing a piece would cut buildings off from the town center, the warning names them first.
+- **Clear / Drain:** click the tool, then click one tile at a time. Clearing gravel is free and gives 3 Stone.
+- **Place a building:** click its card, click the map to pin the ghost, then **Confirm**.
+- **Landmarks:** when you earn one, a **Place** button appears in the build panel.
 
 ### On a phone
 
-- **Spell a word:** tap letter tiles, then **Submit**.
-  - The **delete** key removes the last letter; hold it for half a second to clear the word.
-  - Tap a letter in the word box to take it back.
-- **Build:** tap **Build** to slide up the panel, then pick a tool or a building. The panel closes and a chip shows the tool; **Done** puts it down.
-- **Roads:** drag with one finger, then tap **Confirm** in the bar above the letters.
-- **Buildings:** drag the ghost with your finger (the map doesn't move while you do). Lift your finger to pin it, then tap **Confirm**.
-- **Look around:** one finger drags the map when no tool is in use; two fingers pinch to zoom.
+- **Spell a word:** tap letter tiles, then **Submit**. Hold the delete key for half a second to clear the word.
+- **Build:** tap **Build** to slide up the panel. For Road or Bridge the panel stays open so you can buy; tap a piece in the bank and the panel closes. Tap the map where the piece starts, **Rotate**, then **Confirm**.
+- **Orders:** tap **Orders** at the top right.
+- **Buildings:** drag the ghost with your finger, lift to pin it, then tap **Confirm**.
 
 ### Saving
 
 - **Autosave:** your town saves itself one second after every change, and when you close the tab.
-- **Menu → Saves:** three slots, Export and Import of one town file, and New town.
-- **Older towns:** a town saved by the earlier version (WordCity) still loads. Any road it had on marsh becomes a bridge, free, and a message says how many.
+- **Older towns:** a v2 town still loads. A town center is placed near the middle of the map, old roads become one-tile pieces, your rack is set to its new size, and any landmarks you have already earned are announced.
 
 ---
 
@@ -84,7 +65,7 @@ You only need a web browser for this.
 
 ### 1. Put the files on GitHub
 
-1. Unzip the newest zip Claude sent (for example `lexington-v2.0.zip`) on your Mac. You get a folder called `wordcity`.
+1. Unzip the newest zip Claude sent (for example `lexington-v3.0.0.zip`) on your Mac. You get a folder called `wordcity`.
 2. Open your repository on GitHub. If it is still called `wordcity`, rename it first:
    1. Open **Settings** (the tab at the top of the repository).
    2. Under **Repository name**, type `lexington`.
@@ -117,7 +98,7 @@ You only need a web browser for this.
 | Add this | What it does |
 |---|---|
 | `?seed=stu` | **New Town** builds the map from the seed "stu" without deleting anything. Autosave is off for that visit, so your real town is never replaced. |
-| `?showcase` | **New Town** places one of each of the 11 buildings, so you can see the art in the game. Autosave is off. |
+| `?showcase` | **New Town** places one of each building, so you can see the art in the game. Autosave is off. |
 | `?sandbox` | **New Town** unlocks every tier and gives 9,999 of each resource. Autosave is off. For testing only. |
 | `?testNoWebGL` | Pretends the graphics card failed, so you can see the "Reload Map" safety screen. |
 | `?testDict=corrupt` | Pretends the word list is broken, so you can see the 200-word backup list take over. |
@@ -139,32 +120,17 @@ npm run preview    # serve the production build (Section 14 requires this)
 npm run typecheck  # TypeScript check (not part of the Vercel build)
 ```
 
-- **Pinned versions:** `pixi.js` is pinned to exactly `7.4.2` (Section 10), and `idb-keyval` to exactly `6.2.1` (Section 11). Commit `package-lock.json`.
-- **The name:** it lives in one constant, `NAME` in `src/game/config.ts`.
-- **Game state** lives in `src/game/store.ts`, outside React.
-  - The rack is a list of tile objects (Section 5).
-  - Road and bridge previews, the placement ghost, Hint and Swap all live there; none of them is ever saved.
-- **The Pixi map:** `src/pixi/MapView.tsx` is the only component that touches Pixi. It is mounted once, when a town or the tutorial is first entered, and is only hidden when the player returns to the title screen.
-- **Keyboard:** one document-level listener, `src/ui/keyboard.ts`, registered once.
-- **Title screen and tutorial:**
-  - title screen: `src/ui/TitleScreen.tsx`;
-  - tutorial text and fixed data: `src/game/tutorial.ts`;
-  - tutorial flow: `src/game/tutorialFlow.ts`;
-  - caption panel: `src/ui/Tutorial.tsx`.
-- **Saves:**
-  - format version 2: `src/game/save.ts`, with `MIGRATIONS[1]` turning v1 marsh roads into bridges;
-  - IndexedDB and the tutorial flag: `src/game/persistence.ts`.
-- **Terrain polish and blending (Section 13, with the Nov 22, 2026 blending addendum):**
-  - `src/pixi/terrainClusters.ts`: patches, depth, and where the mountain peaks stand.
-  - `src/pixi/terrainBake.ts`: the one-texture bake, including the soft boundaries between terrains, the marsh and water banks, the peaks, canopies and large trees.
-  - `src/pixi/buildingLayer.ts`: the ground tint and contact shadow under every building.
-  - The six Gemini polish pieces are wired in (slots in `POLISH_ART` in `src/pixi/terrainVariants.ts`). Their source names map to slots in `POLISH_FILES` in `scripts/art/process_art.py`, so `terrain-peak.jpg`, `terrain-canopy-1.jpg` and the rest can sit with the other JPGs.
-  - To replace or add a piece, put the JPG with the other JPGs and run `python3 -I scripts/art/process_art.py <folder of JPGs> src/assets`. No code changes.
-- **UI art:** `scripts/art/process_ui.py` keys the game icon, letter tiles and resource icons into `src/assets/ui/`.
-- **Boone's scripts:** `scripts/boone/economy_sim.py` and `scripts/boone/find_tutorial_seed.mjs`. To run the simulation from the repository root:
-
-  ```bash
-  mkdir -p build-verified && ln -s ../src build-verified/src
-  python3 scripts/boone/economy_sim.py 400
-  ```
+- **Pinned versions:** `pixi.js` exactly `7.4.2` (Section 10), `idb-keyval` exactly `6.2.1` (Section 11). Commit `package-lock.json`.
+- **The name:** one constant, `NAME` in `src/game/config.ts`.
+- **Game state** lives in `src/game/store.ts`, outside React. New v3 rule modules:
+  - `src/game/network.ts`: pieces, banks, prices, the network from the town center, cascades, High Street;
+  - `src/game/orders.ts` and `src/data/orderSolvability.json`: Commission orders and the offline solvability table (regenerate with `node scripts/orders/solvability.mjs`);
+  - `src/game/stamps.ts`: Workshop stamps and the Rune;
+  - `src/game/landmarks.ts`: landmark milestones;
+  - `src/game/terrainChange.ts`: growth and overflow, seeded from the map seed and the word count.
+- **The Pixi map:** `src/pixi/MapView.tsx` is the only component that touches Pixi; mounted once. Terrain changes repaint only the changed area of the baked texture (`bakeTerrain(..., { into, region })` in `src/pixi/terrainBake.ts`).
+- **Saves:** format version 3 in `src/game/save.ts`; the migration chain is v1 to v2 (marsh roads to bridges) then v2 to v3 (town center, legacy pieces, rack size, landmarks).
+- **Tutorial:** text and fixed data in `src/game/tutorial.ts` (every caption is marked BUILD WORDING for Stu to review), flow in `src/game/tutorialFlow.ts`.
+- **Placeholder art:** `scripts/art/make_placeholders.py` draws the Town Center, Scribe and landmark stand-ins; `src/assets/sprites.json` lists them under `placeholders`. Replace a PNG with the same name (or rerun `scripts/art/process_art.py` with the Gemini JPGs) and it is picked up with no code change. Stamps, the Rune tile and the Lantern icon are CSS and inline SVG placeholders (`src/styles.css`, `src/ui/Rack.tsx`); gravel is drawn in `drawGravel` in `src/pixi/terrainBake.ts`.
+- **Boone's scripts:** `scripts/boone/economy_sim.py` (v2) and `scripts/boone/economy_sim_v3.py` (v3, written by Claude because Boone's v3 script was not in the Drive). From the repository root: `python3 scripts/boone/economy_sim_v3.py 400`.
 - **Tests:** `?testHooks` exposes the store, the save functions and the tutorial flow to automated browser tests.
