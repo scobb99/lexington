@@ -13,6 +13,7 @@ export const LINK_BRIDGE = 2;
 /** Values in the store's `bridgeAxis` array: which way the deck runs (Section 4). */
 export const AXIS_NS = 1; // along the grid's north-south axis
 export const AXIS_EW = 2; // along the grid's east-west axis
+export const AXIS_BOTH = 3; // (v3.0.2) a bridge crossing: decks along both axes (derived, never saved)
 
 /**
  * Section 4 (v2.0): roads go on meadow, cleared forest, cleared thicket, drained marsh, and
