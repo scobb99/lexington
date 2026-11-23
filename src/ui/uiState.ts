@@ -11,9 +11,11 @@ export interface UiState {
   savesOpen: boolean;
   /** The New Town panel (Section 11 flow: typed NEW, optional seed box). */
   newTownOpen: boolean;
+  /** (v3.0.2) The on-map Roads tray: the banked road and bridge pieces, ready to lay. */
+  roadsOpen: boolean;
 }
 
-let ui: UiState = { sheetOpen: false, happyOpen: false, menuOpen: false, savesOpen: false, newTownOpen: false };
+let ui: UiState = { sheetOpen: false, happyOpen: false, menuOpen: false, savesOpen: false, newTownOpen: false, roadsOpen: false };
 const listeners = new Set<() => void>();
 
 export function setUi(patch: Partial<UiState>): void {
