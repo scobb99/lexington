@@ -1,5 +1,5 @@
 // Lexington shared types and constants.
-// Every number here traces to the Build Spec v2.0 section noted beside it.
+// Every number here traces to the Build Spec section noted beside it (v3.0 unless marked).
 
 // Section 2: logic is a square 54 x 54 grid; rendering is isometric.
 export const MAP_W = 54;
@@ -69,7 +69,16 @@ export type BuildingType =
   | 'park'
   | 'greenhouse'
   | 'tavern'
-  | 'wizardTower';
+  | 'wizardTower'
+  // (v3.0) Section 18: the town center, founded free as the first building; the network's root.
+  | 'townCenter'
+  // (v3.0) Sections 7 and 19: the Scribe (Tier 2) grants the Reserve Shelf.
+  | 'scribe'
+  // (v3.0) Section 21: an earned landmark (which one is in Building.landmark).
+  | 'landmark';
+
+/** (v3.0) Section 21: the six landmarks, in milestone order. */
+export type LandmarkId = 'fountain' | 'marketCross' | 'lanternPost' | 'oakArch' | 'riverBell' | 'foundersSpire';
 
 export interface Building {
   id: number;
@@ -83,6 +92,8 @@ export interface Building {
    * production, or quests.
    */
   preview?: boolean;
+  /** (v3.0) Section 21: which landmark this is (type 'landmark' only). */
+  landmark?: LandmarkId;
 }
 
 /**
@@ -90,6 +101,7 @@ export interface Building {
  * tile into meadow (from Tier 2). A building type means placement mode for that building.
  */
 export type Tool = 'inspect' | 'road' | 'bridge' | 'clear' | 'drain' | 'remove' | BuildingType;
+// (v3.0) 'landmark' places the earned landmark named in the store's landmarkPick (Section 21).
 
 /**
  * Section 5 (v2.0): one rack tile. Selection state belongs to the tile, never to the letter.
@@ -100,7 +112,13 @@ export interface RackTile {
   id: number;
   letter: string;
   used: boolean;
+  /** (v3.0) Section 19: a Workshop stamp on this tile, if any. */
+  stamp?: StampKind;
 }
+
+/** (v3.0) Section 19: Oak (Sawmill, +4 Lumber), Granite (Quarry, +4 Stone), Gilded (Market, double Coins). */
+export type StampKind = 'oak' | 'granite' | 'gilded';
+export const STAMP_KINDS: StampKind[] = ['oak', 'granite', 'gilded'];
 
 export type MessageKind = 'info' | 'success' | 'warn' | 'error' | 'celebrate';
 export interface GameMessage {
@@ -130,6 +148,10 @@ export interface Lifetime {
   everBuilt: Partial<Record<BuildingType, number>>;
   /** Section 9 uses lifetime Knowledge earned for tier unlocks. Quest rewards count too. */
   earned: Resources;
+  /** (v3.0) Section 9 quest 6: Commission orders completed. */
+  ordersCompleted: number;
+  /** (v3.0) Section 9 quest 7: valid words played through a stamped tile. */
+  stampedWords: number;
 }
 
 export type Tier = 1 | 2 | 3;
