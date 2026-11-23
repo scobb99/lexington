@@ -17,6 +17,7 @@ import { Messages } from './ui/Messages';
 import { OrdersPanel } from './ui/OrdersPanel';
 import { NewTownDialog } from './ui/NewTown';
 import { Rack } from './ui/Rack';
+import { RoadsTray } from './ui/RoadsTray';
 import { SaveDialog } from './ui/SaveMenu';
 import { TitleScreen } from './ui/TitleScreen';
 import { TutorialCaption } from './ui/Tutorial';
@@ -40,6 +41,7 @@ export default function App() {
               <MapErrorBoundary>
                 <MapView />
               </MapErrorBoundary>
+              <RoadsTray />
               <CostBar />
               <PlaceBar />
               <OrdersPanel />
