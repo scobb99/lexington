@@ -189,7 +189,24 @@ export const OFF_PLOT_CAPTION: Record<'cottage' | 'sawmill', string> = {
   sawmill: 'That Sawmill is off the tutorial spot. Choose Remove and tap the Sawmill to take it away, then place a Sawmill on the glowing plot.',
 };
 /** Message when Remove is used on a road or a building on its plot in the build steps. */
-export const TUTORIAL_REMOVE_ONLY = 'In the tutorial, Remove only takes away a building placed off the glowing plot.';
+export const TUTORIAL_REMOVE_ONLY = 'In the tutorial, Remove only takes away a building placed off the glowing plot, or a road piece lying on the plot.';
+
+// (v3.0.1) The Step 9 soft-lock fix (Nov 22, 2026): a road piece could cover the Cottage plot itself,
+// leaving the Cottage step with no legal spot. The marked plots are now reserved in the road steps.
+/** Ghost reason in the road steps for a piece tile over the marked plot (Stu's wording). */
+export const PLOT_PIECE_REASON = 'That is the marked plot. The building goes there; run the road beside it.';
+/** Ghost reason in the first road step for a piece tile over the Sawmill's future plot. BUILD WORDING. */
+export const SAWMILL_SAVED_REASON = 'That spot is saved for your Sawmill. Run this road another way.';
+/** Caption if a road or bridge piece lies on the marked plot in a build step (safety net). BUILD WORDING. */
+export const PLOT_BLOCKED_CAPTION: Record<'cottage' | 'sawmill', string> = {
+  cottage: 'A road piece is lying on the marked Cottage plot. Choose Remove and tap that piece: it goes back to your bank. Then place the Cottage on the plot.',
+  sawmill: 'A road piece is lying on the marked Sawmill plot. Choose Remove and tap that piece: it goes back to your bank. Then place the Sawmill on the plot.',
+};
+/** (v3.0.1) The one-tap assist in the build steps (Stu's wording). */
+export const PLACE_ON_PLOT: Record<'cottage' | 'sawmill', string> = {
+  cottage: 'Place the Cottage on the marked plot',
+  sawmill: 'Place the Sawmill on the marked plot',
+};
 
 /** Every frame of the tutorial, in order. Frame ids are stable names used by the flow. */
 export const FRAMES: Record<string, Frame> = {
@@ -255,7 +272,10 @@ export const FRAMES: Record<string, Frame> = {
     title: STEP_TITLES[9],
     kind: 'action',
     highlight: 'cottage-card',
-    text: 'This is a Cottage. Its card says what it costs, what it does, and where it can go. Move the Cottage over the marked plot. Green means the spot is legal. Try the road or the hill: it turns red and tells you why.',
+    text: [
+      'This is a Cottage. Its card says what it costs, what it does, and where it can go. Move the Cottage over the marked plot. Green means the spot is legal. Try the road or the hill: it turns red and tells you why.',
+      'Fiddly on a small screen? The button below places it on the plot for you.',
+    ],
   },
   cottageDone: {
     step: 9,
@@ -269,7 +289,10 @@ export const FRAMES: Record<string, Frame> = {
     title: STEP_TITLES[10],
     kind: 'action',
     highlight: 'sawmill-card',
-    text: 'Words never pay Lumber, so your town needs a workshop. Lay another road piece from the marked tile so it ends beside the marked Sawmill plot, then place the Sawmill on the plot. It sits beside the forest it cuts.',
+    text: [
+      'Words never pay Lumber, so your town needs a workshop. Lay another road piece from the marked tile so it ends beside the marked Sawmill plot, then place the Sawmill on the plot. It sits beside the forest it cuts.',
+      'Once the road is in, the button below can place the Sawmill for you.',
+    ],
   },
   sawmillDone: {
     step: 10,
