@@ -1,12 +1,13 @@
 // Building catalog and the values derived from buildings.
-// Costs and production: Build Spec v2.0 Section 6. Footprints, tiers, terrain rules, the
+// Costs and production: Build Spec v3.0 Section 6. Footprints, tiers, terrain rules, the
 // placement ghost reasons and the build card text: Section 7. Population and happiness:
-// Section 8. Art: the approved Gemini sprites in src/assets/buildings/ (Section 3).
+// Section 8 (the multiplier is cut, LOCKED amendment ruling 5). Art: the approved Gemini
+// sprites in src/assets/buildings/ (Section 3); the v3.0 pieces are placeholders until the art lands.
 
-import { Terrain, emptyResources, type Building, type BuildingType, type Resources, type Tier } from './types';
+import { Terrain, emptyResources, type Building, type BuildingType, type LandmarkId, type Resources, type Tier } from './types';
 
 export type TerrainRule =
-  | 'meadowOrCleared' // Cottage, Market, Library, Town Hall, Tavern, Greenhouse, Wizard Tower, Park
+  | 'meadowOrCleared' // Cottage, Market, Library, Town Hall, Tavern, Greenhouse, Wizard Tower, Park, Scribe, landmarks, town center
   | 'nearForest' // Sawmill: adjacent to forest or thicket edge
   | 'nearHill' // Quarry: hill adjacency or hill tiles in the footprint
   | 'pier'; // Pier: next to water and a road; footprint entirely on land
@@ -19,10 +20,12 @@ export interface BuildingDef {
   h: number;
   cost: Resources;
   terrain: TerrainRule;
-  /** Section 7: only Cottages house anyone (3 each). */
+  /** Section 8: only Cottages house anyone (3 each). */
   housing: number;
-  /** Section 6: payout per valid word (Wizard Tower handled separately). */
+  /** (v3.0) Section 6: the trickle, paid per valid word by each connected building (Wizard Tower separate). */
   production: Resources;
+  /** (v3.0) Founded or earned, never bought: no build card (town center, landmarks). */
+  notBought?: boolean;
 }
 
 const r = (coins: number, lumber: number, stone: number, knowledge: number, magic: number): Resources => ({
@@ -33,77 +36,99 @@ const r = (coins: number, lumber: number, stone: number, knowledge: number, magi
   magic,
 });
 
-// Section 6 (v2.0) costs are Coins, Lumber, Stone, Knowledge, Magic. Section 6 (v2.0) production
-// rates per valid word. Section 7 footprints and tiers.
+// Section 6 (v3.0) costs are Coins, Lumber, Stone, Knowledge, Magic. Section 6 (v3.0) trickle:
+// every connected production building pays 1 of its resource per valid word. Section 7 footprints.
 export const BUILDINGS: Record<BuildingType, BuildingDef> = {
+  // Founded (Section 18): free, 2 by 2 (proposed), not in a tier, no card.
+  townCenter: { type: 'townCenter', name: 'Town Center', tier: 1, w: 2, h: 2, cost: r(0, 0, 0, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 0, 0), notBought: true },
   // Tier 1
-  // Cottage: Section 6 v2.0 gains a 2 Stone cost (Stu's seed idea): 10, 8, 2, 0, 0.
-  cottage: { type: 'cottage', name: 'Cottage', tier: 1, w: 1, h: 1, cost: r(10, 8, 2, 0, 0), terrain: 'meadowOrCleared', housing: 3, production: r(0, 0, 0, 0, 0) },
-  // Sawmill: Section 6 v2.0 25, 15, 0, 0, 0 (was 25, 12, 5). Pays 3 Lumber (was 2).
-  sawmill: { type: 'sawmill', name: 'Sawmill', tier: 1, w: 2, h: 2, cost: r(25, 15, 0, 0, 0), terrain: 'nearForest', housing: 0, production: r(0, 3, 0, 0, 0) },
-  // Quarry: Section 6 v2.0 25, 15, 0, 0, 0 (was 25, 0, 15). Pays 3 Stone (was 2).
-  quarry: { type: 'quarry', name: 'Quarry', tier: 1, w: 2, h: 2, cost: r(25, 15, 0, 0, 0), terrain: 'nearHill', housing: 0, production: r(0, 0, 3, 0, 0) },
+  // Cottage: Section 6 v3.0 8, 4, 1, 0, 0 (was 10, 8, 2).
+  cottage: { type: 'cottage', name: 'Cottage', tier: 1, w: 1, h: 1, cost: r(8, 4, 1, 0, 0), terrain: 'meadowOrCleared', housing: 3, production: r(0, 0, 0, 0, 0) },
+  // Sawmill: Section 6 v3.0 15, 0, 4, 0, 0 (was 25, 15, 0). Trickle 1 Lumber; stamps Oak (Section 19).
+  sawmill: { type: 'sawmill', name: 'Sawmill', tier: 1, w: 2, h: 2, cost: r(15, 0, 4, 0, 0), terrain: 'nearForest', housing: 0, production: r(0, 1, 0, 0, 0) },
+  // Quarry: Section 6 v3.0 15, 6, 0, 0, 0 (was 25, 15, 0). Trickle 1 Stone; stamps Granite.
+  quarry: { type: 'quarry', name: 'Quarry', tier: 1, w: 2, h: 2, cost: r(15, 6, 0, 0, 0), terrain: 'nearHill', housing: 0, production: r(0, 0, 1, 0, 0) },
   // Tier 2
-  // Market: Section 6 60, 20, 10, 0, 0 (unchanged). Pays 4 Coins (v2.0, was 2).
-  market: { type: 'market', name: 'Market', tier: 2, w: 3, h: 2, cost: r(60, 20, 10, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(4, 0, 0, 0, 0) },
-  // Library: Section 6 50, 15, 10, 0, 0. Pays 2 Knowledge (v2.0, was 1).
-  library: { type: 'library', name: 'Library', tier: 2, w: 2, h: 2, cost: r(50, 15, 10, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 2, 0) },
-  // Pier: Section 6 40, 10, 0, 0, 0. Pays 2 Coins and 2 Lumber (v2.0, was 1 and 1).
-  pier: { type: 'pier', name: 'Pier', tier: 2, w: 2, h: 1, cost: r(40, 10, 0, 0, 0), terrain: 'pier', housing: 0, production: r(2, 2, 0, 0, 0) },
+  // Market: Section 6 60, 20, 10, 0, 0 (carried). Trickle 1 Coin; stamps Gilded.
+  market: { type: 'market', name: 'Market', tier: 2, w: 3, h: 2, cost: r(60, 20, 10, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(1, 0, 0, 0, 0) },
+  // Library: Section 6 50, 15, 10, 0, 0 (carried). Trickle 1 Knowledge; Lanterns twice as fast.
+  library: { type: 'library', name: 'Library', tier: 2, w: 2, h: 2, cost: r(50, 15, 10, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 1, 0) },
+  // Pier: Section 6 40, 10, 0, 0, 0 (carried). Trickle 1 Coin and 1 Lumber.
+  pier: { type: 'pier', name: 'Pier', tier: 2, w: 2, h: 1, cost: r(40, 10, 0, 0, 0), terrain: 'pier', housing: 0, production: r(1, 1, 0, 0, 0) },
+  // Scribe: Section 6 v3.0 (proposed) 40, 15, 5, 0, 0; 2 by 2 (proposed). Grants the Reserve Shelf.
+  scribe: { type: 'scribe', name: 'Scribe', tier: 2, w: 2, h: 2, cost: r(40, 15, 5, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 0, 0) },
   // Tier 3
-  // Town Hall: Section 6 150, 40, 40, 20, 0.
+  // Town Hall: Section 6 150, 40, 40, 20, 0 (carried). Rack to 9 (Section 5).
   townHall: { type: 'townHall', name: 'Town Hall', tier: 3, w: 3, h: 3, cost: r(150, 40, 40, 20, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 0, 0) },
-  // Park: Section 6 30, 10, 0, 0, 0.
+  // Park: Section 6 30, 10, 0, 0, 0 (carried).
   park: { type: 'park', name: 'Park', tier: 3, w: 2, h: 2, cost: r(30, 10, 0, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 0, 0) },
-  // Greenhouse: Section 6 90, 30, 15, 0, 0. Pays 2 Lumber and 2 Knowledge (v2.0, was 1 and 1).
-  greenhouse: { type: 'greenhouse', name: 'Greenhouse', tier: 3, w: 3, h: 2, cost: r(90, 30, 15, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 2, 0, 2, 0) },
-  // Tavern: Section 6 70, 25, 10, 0, 0. Pays 2 Coins (v2.0, was 1).
-  tavern: { type: 'tavern', name: 'Tavern', tier: 3, w: 2, h: 2, cost: r(70, 25, 10, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(2, 0, 0, 0, 0) },
-  // Wizard Tower: Section 6 80, 0, 20, 30, 10. 1 Magic per 5 valid words (unchanged).
+  // Greenhouse: Section 6 90, 30, 15, 0, 0 (carried). Trickle 1 Lumber and 1 Knowledge.
+  greenhouse: { type: 'greenhouse', name: 'Greenhouse', tier: 3, w: 3, h: 2, cost: r(90, 30, 15, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 1, 0, 1, 0) },
+  // Tavern: Section 6 70, 25, 10, 0, 0 (carried). Trickle 1 Coin.
+  tavern: { type: 'tavern', name: 'Tavern', tier: 3, w: 2, h: 2, cost: r(70, 25, 10, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(1, 0, 0, 0, 0) },
+  // Wizard Tower: Section 6 80, 0, 20, 30, 10 (carried). 1 Magic per 5 valid words; charges the Rune.
   wizardTower: { type: 'wizardTower', name: 'Wizard Tower', tier: 3, w: 2, h: 2, cost: r(80, 0, 20, 30, 10), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 0, 0) },
+  // Section 21: a landmark, 1 by 1 (proposed), earned, never bought.
+  landmark: { type: 'landmark', name: 'Landmark', tier: 1, w: 1, h: 1, cost: r(0, 0, 0, 0, 0), terrain: 'meadowOrCleared', housing: 0, production: r(0, 0, 0, 0, 0), notBought: true },
 };
 
+/** The buildings a player can buy, in build menu order (Section 7 catalog). */
 export const TIER_ORDER: BuildingType[] = [
   'cottage', 'sawmill', 'quarry',
-  'market', 'library', 'pier',
+  'market', 'library', 'pier', 'scribe',
   'townHall', 'park', 'greenhouse', 'tavern', 'wizardTower',
 ];
 
-/** Section 6: the first three buildings of a type pay full; extras pay half, rounded down. */
-export const FULL_RATE_COUNT = 3;
 /** Section 6: Wizard Tower pays 1 Magic per 5 valid words. */
 export const WIZARD_MAGIC_EVERY = 5;
 
-// ---------- Section 7 (v2.0): build menu cards, exact text ----------
+/** (v3.0) Section 21: landmark names, in milestone order. */
+export const LANDMARK_NAMES: Record<LandmarkId, string> = {
+  fountain: 'First Stones Fountain',
+  marketCross: 'Market Cross',
+  lanternPost: 'Lantern Post',
+  oakArch: 'Old Oak Arch',
+  riverBell: 'River Bell',
+  foundersSpire: "Founders' Spire",
+};
+
+/** The name a building shows (a landmark shows its own name). */
+export function buildingName(b: Building): string {
+  return b.type === 'landmark' && b.landmark ? LANDMARK_NAMES[b.landmark] : BUILDINGS[b.type].name;
+}
+
+// ---------- Section 7 (v3.0): build menu cards, exact text ----------
 
 export interface CardText {
   /** "Cottage · Tier 1 · 1 by 1" */
   header: string;
-  /** "10 Coins, 8 Lumber, 2 Stone" */
+  /** "8 Coins, 4 Lumber, 1 Stone" */
   cost: string;
   does: string;
   goes: string;
 }
 
-/** Section 7 table: the wording the game shows on each card. */
-export const CARD_TEXT: Record<BuildingType, CardText> = {
-  cottage: { header: 'Cottage · Tier 1 · 1 by 1', cost: '10 Coins, 8 Lumber, 2 Stone', does: 'Houses 3 people. People unlock tiers and finish quests.', goes: 'Meadow or cleared land, beside a road.' },
-  sawmill: { header: 'Sawmill · Tier 1 · 2 by 2', cost: '25 Coins, 15 Lumber', does: 'Pays 3 Lumber every time you submit a valid word.', goes: 'Meadow or cleared land beside forest or thicket, with a road beside it.' },
-  quarry: { header: 'Quarry · Tier 1 · 2 by 2', cost: '25 Coins, 15 Lumber', does: 'Pays 3 Stone every time you submit a valid word.', goes: 'A hill in its footprint or beside it, with a road beside it.' },
-  market: { header: 'Market · Tier 2 · 3 by 2', cost: '60 Coins, 20 Lumber, 10 Stone', does: 'Pays 4 Coins every time you submit a valid word.', goes: 'Meadow or cleared land, beside a road.' },
-  library: { header: 'Library · Tier 2 · 2 by 2', cost: '50 Coins, 15 Lumber, 10 Stone', does: 'Pays 2 Knowledge every time you submit a valid word. Raises happiness by 4.', goes: 'Meadow or cleared land, beside a road.' },
-  pier: { header: 'Pier · Tier 2 · 2 by 1', cost: '40 Coins, 10 Lumber', does: 'Pays 2 Coins and 2 Lumber every time you submit a valid word. Raises happiness by 2.', goes: 'On land beside water, with a road beside it.' },
-  townHall: { header: 'Town Hall · Tier 3 · 3 by 3', cost: '150 Coins, 40 Lumber, 40 Stone, 20 Knowledge', does: 'Raises happiness by 10. The last quest asks for a Town Hall.', goes: 'Meadow or cleared land, beside a road.' },
+/** Section 7 (v3.0) table: the wording the game shows on each card. */
+export const CARD_TEXT: Partial<Record<BuildingType, CardText>> = {
+  cottage: { header: 'Cottage · Tier 1 · 1 by 1', cost: '8 Coins, 4 Lumber, 1 Stone', does: 'Houses 3 people. Your 2nd Cottage adds a 7th rack tile, and your 4th adds an 8th.', goes: 'Meadow or cleared land, beside a road.' },
+  sawmill: { header: 'Sawmill · Tier 1 · 2 by 2', cost: '15 Coins, 4 Stone', does: 'Pays 1 Lumber every time you submit a valid word, and stamps an Oak tile every 3rd word: a word played through it pays 4 more Lumber.', goes: 'Meadow or cleared land beside forest or thicket, with a road beside it.' },
+  quarry: { header: 'Quarry · Tier 1 · 2 by 2', cost: '15 Coins, 6 Lumber', does: 'Pays 1 Stone every time you submit a valid word, and stamps a Granite tile every 3rd word: a word played through it pays 4 more Stone.', goes: 'A hill in its footprint or beside it, with a road beside it.' },
+  market: { header: 'Market · Tier 2 · 3 by 2', cost: '60 Coins, 20 Lumber, 10 Stone', does: 'Pays 1 Coin every time you submit a valid word, and stamps a Gilded tile every 3rd word: a word played through it pays double Coins.', goes: 'Meadow or cleared land, beside a road.' },
+  library: { header: 'Library · Tier 2 · 2 by 2', cost: '50 Coins, 15 Lumber, 10 Stone', does: 'Pays 1 Knowledge every time you submit a valid word. Lanterns refill twice as fast while it stands. Raises happiness by 4.', goes: 'Meadow or cleared land, beside a road.' },
+  pier: { header: 'Pier · Tier 2 · 2 by 1', cost: '40 Coins, 10 Lumber', does: 'Pays 1 Coin and 1 Lumber every time you submit a valid word. Raises happiness by 2.', goes: 'On land beside water, with a road beside it.' },
+  scribe: { header: 'Scribe · Tier 2 · 2 by 2', cost: '40 Coins, 15 Lumber, 5 Stone', does: 'Gives you a Reserve Shelf: set one letter aside and swap it back whenever you like. The shelf locks if the Scribe loses its road.', goes: 'Meadow or cleared land, beside a road.' },
+  townHall: { header: 'Town Hall · Tier 3 · 3 by 3', cost: '150 Coins, 40 Lumber, 40 Stone, 20 Knowledge', does: 'Your rack grows to 9 tiles. Raises happiness by 10. The last quest asks for a Town Hall.', goes: 'Meadow or cleared land, beside a road.' },
   park: { header: 'Park · Tier 3 · 2 by 2', cost: '30 Coins, 10 Lumber', does: 'Raises happiness by 5.', goes: 'Meadow or cleared land, beside a road.' },
-  greenhouse: { header: 'Greenhouse · Tier 3 · 3 by 2', cost: '90 Coins, 30 Lumber, 15 Stone', does: 'Pays 2 Lumber and 2 Knowledge every time you submit a valid word.', goes: 'Meadow or cleared land, beside a road.' },
-  tavern: { header: 'Tavern · Tier 3 · 2 by 2', cost: '70 Coins, 25 Lumber, 10 Stone', does: 'Pays 2 Coins every time you submit a valid word. Raises happiness by 6.', goes: 'Meadow or cleared land, beside a road.' },
-  wizardTower: { header: 'Wizard Tower · Tier 3 · 2 by 2', cost: '80 Coins, 20 Stone, 30 Knowledge, 10 Magic', does: 'Pays 1 Magic for every 5 valid words you submit, and doubles the Magic your rare letters earn.', goes: 'Meadow or cleared land, beside a road.' },
+  greenhouse: { header: 'Greenhouse · Tier 3 · 3 by 2', cost: '90 Coins, 30 Lumber, 15 Stone', does: 'Pays 1 Lumber and 1 Knowledge every time you submit a valid word.', goes: 'Meadow or cleared land, beside a road.' },
+  tavern: { header: 'Tavern · Tier 3 · 2 by 2', cost: '70 Coins, 25 Lumber, 10 Stone', does: 'Pays 1 Coin every time you submit a valid word. Raises happiness by 6.', goes: 'Meadow or cleared land, beside a road.' },
+  wizardTower: { header: 'Wizard Tower · Tier 3 · 2 by 2', cost: '80 Coins, 20 Stone, 30 Knowledge, 10 Magic', does: 'Pays 1 Magic for every 5 valid words you submit, doubles the Magic your rare letters earn, and charges a Rune tile: a wild letter you choose.', goes: 'Meadow or cleared land, beside a road.' },
 };
 
-/** Section 7: the two standing notes, shown in the build panel's help line. */
+/** Section 7 (v3.0): the standing notes, shown in the build panel's help line. */
 export const CARD_NOTES = [
-  'Pays lines show the full rate. The fourth and later buildings of a type pay half, rounded down.',
+  'Stamp lines show one building. A second building of the same type stamps every 2nd word instead.',
   'Happiness lines show the amount per building, up to the caps: road-connected Cottages stop adding at plus 10, Parks at plus 15, Libraries at plus 12, Taverns at plus 12, Piers at plus 6.',
+  'A building that is not connected to the town center pays nothing and stamps nothing.',
 ];
 
 /** Section 7: the line a locked card shows instead of its does line. */
@@ -130,7 +155,7 @@ export function countOf(buildings: Building[], type: BuildingType): number {
 export interface HappinessInputs {
   buildings: Building[];
   tier: Tier;
-  /** True when the building touches a road or bridge (Section 7 placement guarantees this). */
+  /** (v3.0) True when the building is connected to the town center through the road network. */
   isRoadConnected: (b: Building) => boolean;
 }
 
@@ -157,6 +182,8 @@ export function happinessBreakdown({ buildings, tier, isRoadConnected }: Happine
   add(`Taverns (${n('tavern')}, +6 each, up to +12)`, Math.min(12, n('tavern') * 6));
   add('Town Hall', n('townHall') > 0 ? 10 : 0);
   add(`Piers (${n('pier')}, +2 each, up to +6)`, Math.min(6, n('pier') * 2));
+  // (v3.0) LOCKED amendment ruling 1: each placed landmark adds plus 2, permanent while placed.
+  add(`Landmarks (${n('landmark')}, +2 each)`, n('landmark') * 2);
   // Minus 4 for each Sawmill or Quarry within 2 tiles of any Cottage, capped at minus 16.
   const cottages = list.filter((b) => b.type === 'cottage');
   const noisy = list.filter((b) => b.type === 'sawmill' || b.type === 'quarry');
@@ -182,8 +209,10 @@ export function footprintGap(a: Building, b: Building): number {
 }
 
 /**
- * Section 6: one production payout per valid word from every built, road-connected
- * production building. `validWordsAfter` is the lifetime valid word count including this word.
+ * (v3.0) Section 6, the trickle: each valid word, every connected production building pays 1 of
+ * its resource (no half rate, no cap by count). Wizard Tower: 1 Magic per 5 valid words while
+ * connected. `validWordsAfter` is the lifetime valid word count including this word. Stamps and
+ * orders are paid elsewhere (Sections 18 and 19).
  */
 export function production(
   buildings: Building[],
@@ -191,19 +220,11 @@ export function production(
   validWordsAfter: number,
 ): Resources {
   const out = emptyResources();
-  const seen: Partial<Record<BuildingType, number>> = {};
   for (const b of realBuildings(buildings)) {
     if (!isRoadConnected(b)) continue;
     const def = BUILDINGS[b.type];
-    const nth = (seen[b.type] = (seen[b.type] ?? 0) + 1);
-    const full = nth <= FULL_RATE_COUNT;
-    for (const k of Object.keys(out) as (keyof Resources)[]) {
-      const v = def.production[k];
-      out[k] += full ? v : Math.floor(v / 2);
-    }
-    if (b.type === 'wizardTower' && validWordsAfter % WIZARD_MAGIC_EVERY === 0) {
-      out.magic += full ? 1 : 0; // half of 1, rounded down, is 0
-    }
+    for (const k of Object.keys(out) as (keyof Resources)[]) out[k] += def.production[k];
+    if (b.type === 'wizardTower' && validWordsAfter % WIZARD_MAGIC_EVERY === 0) out.magic += 1;
   }
   return out;
 }
@@ -285,6 +306,13 @@ export interface PlacementContext {
   buildings: Building[];
   mapW: number;
   mapH: number;
+  /** (v3.0) Section 20: gravel deposits (1 = gravel). Gravel blocks building until cleared. */
+  gravel?: Uint8Array;
+  /**
+   * (v3.0) Section 4: true for a network tile (a connected road or bridge tile, or a town center
+   * tile). Without it (save checks), any road or bridge tile counts.
+   */
+  networkAt?: (x: number, y: number) => boolean;
 }
 
 /**
@@ -304,7 +332,9 @@ export type PlacementProblem =
   | 'sawmill'
   | 'quarry'
   | 'pier'
-  | 'noRoad';
+  | 'gravel'
+  | 'noRoad'
+  | 'disconnected';
 
 /** Top-left tile of a footprint centred under the pointer's tile. */
 export function footprintOrigin(type: BuildingType, tx: number, ty: number): { x: number; y: number } {
@@ -360,6 +390,7 @@ export function placementProblem(ctx: PlacementContext, type: BuildingType, x: n
   if (cells.some(([xx, yy]) => at(xx, yy) === Terrain.Thicket)) return 'thicket';
   if (cells.some(([xx, yy]) => at(xx, yy) === Terrain.Forest)) return 'forest';
   if (cells.some(([xx, yy]) => at(xx, yy) === Terrain.Marsh)) return 'marsh';
+  if (ctx.gravel && cells.some(([xx, yy]) => ctx.gravel![yy * ctx.mapW + xx] === 1)) return 'gravel';
 
   if (def.terrain === 'meadowOrCleared') {
     if (cells.some(([xx, yy]) => at(xx, yy) !== Terrain.Meadow)) return 'terrain';
@@ -370,6 +401,14 @@ export function placementProblem(ctx: PlacementContext, type: BuildingType, x: n
   if (def.terrain === 'nearHill' && !(cells.some(([xx, yy]) => at(xx, yy) === Terrain.Hill) || ringTerrain.some((t) => t === Terrain.Hill))) return 'quarry';
   if (def.terrain === 'pier' && !ringTerrain.some((t) => t === Terrain.Water)) return 'pier';
 
+  // (v3.0) Section 18: the town center is founded before any road exists.
+  if (type === 'townCenter') return null;
+  // (v3.0) Section 7: at least one side next to a CONNECTED road or bridge tile (Section 4); the
+  // town center's own tiles count as network tiles.
+  if (ctx.networkAt) {
+    if (ring.some(([xx, yy]) => inMap(xx, yy) && ctx.networkAt!(xx, yy))) return null;
+    return ring.some(([xx, yy]) => link(xx, yy)) ? 'disconnected' : 'noRoad';
+  }
   if (!ring.some(([xx, yy]) => link(xx, yy))) return 'noRoad';
   return null;
 }
@@ -399,7 +438,11 @@ export function placementReason(problem: PlacementProblem, type: BuildingType): 
       return 'Needs a hill in its footprint or beside it.';
     case 'pier':
       return 'Must sit on land beside water.';
+    case 'gravel':
+      return 'That tile is gravel. Clear it first.';
     case 'noRoad':
       return 'Needs a road beside it.';
+    case 'disconnected':
+      return 'Needs a road beside it that connects to the town center.';
   }
 }
