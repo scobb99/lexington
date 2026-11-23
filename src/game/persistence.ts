@@ -215,7 +215,7 @@ export async function newGame(seed?: string): Promise<void> {
   const sandbox = !!test && new URLSearchParams(window.location.search).has('sandbox');
   const urlSeed = test ? new URLSearchParams(window.location.search).get('seed') : null;
   startNewGame(seed && seed.trim() ? seed : urlSeed ?? undefined, { sandbox });
-  if (test && new URLSearchParams(window.location.search).has('showcase')) placeShowcase(); // ?showcase: all 11 buildings on the map, for art review
+  if (test && new URLSearchParams(window.location.search).has('showcase')) placeShowcase(); // ?showcase: every building and landmark on the map, for art review
   startAutosave();
   await flushAutosave();
 }
