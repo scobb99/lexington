@@ -1,12 +1,17 @@
-// The word game rules: rack, validation, rewards, and the Hint word (Build Spec v2.0,
+// The word game rules: rack, validation, rewards, and the Lantern guide word (Build Spec v3.0,
 // Sections 5 and 6). Pure functions only (no React, no Pixi, no store) so they can be
 // unit-tested and reused by the economy simulation.
 
-import { emptyResources, type Resources, type Tier } from './types';
+import { type BuildingType, type Resources, type Tier } from './types';
 
 // ---------- Section 5: rack ----------
 
-export const RACK_SIZE = 8; // Section 5: 8 letters
+/** (v3.0) Section 5, the Growing Rack: a new town's rack holds 6 tiles. */
+export const RACK_START = 6;
+/** The largest rack (the Town Hall's 9). */
+export const RACK_MAX = 9;
+/** v2.0's fixed rack (kept for the v2 save check and the tutorial's v2 data). */
+export const RACK_SIZE = 8;
 export const REROLL_EVERY = 5; // Section 5: 1 reroll per 5 valid words
 export const REROLL_MAX = 3; // Section 5: hold up to 3
 export const REPEAT_WINDOW = 10; // Section 5: last 10 submissions
@@ -32,14 +37,26 @@ export function drawLetter(rng: Rng = Math.random): string {
   return BAG[Math.floor(rng() * BAG.length) % BAG.length];
 }
 
-export function drawRack(rng: Rng = Math.random): string[] {
-  return Array.from({ length: RACK_SIZE }, () => drawLetter(rng));
+export function drawRack(rng: Rng = Math.random, size: number = RACK_START): string[] {
+  return Array.from({ length: size }, () => drawLetter(rng));
 }
 
-/** Keeps the letters that were not used and refills the rack back to 8. */
-export function refillRack(remaining: string[], rng: Rng = Math.random): string[] {
-  const out = remaining.slice(0, RACK_SIZE);
-  while (out.length < RACK_SIZE) out.push(drawLetter(rng));
+/**
+ * (v3.0) Section 5: rack size from buildings ever built (the Section 9 reading, so removing a
+ * Cottage never shrinks it): 6; 7 at the 2nd Cottage; 8 at the 4th; 9 at the Town Hall.
+ */
+export function rackSizeFor(everBuilt: Partial<Record<BuildingType, number>>): number {
+  if ((everBuilt.townHall ?? 0) >= 1) return 9;
+  const c = everBuilt.cottage ?? 0;
+  if (c >= 4) return 8;
+  if (c >= 2) return 7;
+  return RACK_START;
+}
+
+/** Keeps the letters that were not used and refills the rack back to its size. */
+export function refillRack(remaining: string[], rng: Rng = Math.random, size: number = RACK_START): string[] {
+  const out = remaining.slice(0, size);
+  while (out.length < size) out.push(drawLetter(rng));
   return out;
 }
 
@@ -115,9 +132,12 @@ function withoutOk(c: { letter: string; need: number; have: number }) {
 export const VOWELS = new Set(['A', 'E', 'I', 'O', 'U']); // Section 6: V counts A, E, I, O, U
 export const RARE = new Set(['J', 'Q', 'X', 'Z', 'K', 'V']); // Section 6: R counts J, Q, X, Z, K, V
 
-/** Section 6 reward formulas, before the happiness multiplier. */
-export function baseReward(word: string): Resources {
-  const L = word.length;
+/**
+ * (v3.0) Section 6 reward formulas. Material separation: words pay Coins, Knowledge and Magic
+ * only; Lumber and Stone are 0. `effLength` is the High Street effective length (Section 19), used
+ * only for the length term; vowels and rare letters are counted on the real word.
+ */
+export function baseReward(word: string, effLength: number = word.length): Resources {
   let V = 0;
   let R = 0;
   for (const ch of word) {
@@ -125,63 +145,51 @@ export function baseReward(word: string): Resources {
     if (RARE.has(ch)) R++;
   }
   return {
-    coins: Math.max(2, Math.floor(L / 2)), // Section 6: max(2, floor(L / 2))
-    lumber: Math.max(1, Math.floor((L - V) / 3)), // Section 6: floor((L - V) / 3), minimum 1
-    stone: Math.max(1, Math.floor((L - V) / 3)), // Section 6 (v2.0): floor((L - V) / 3), minimum 1 (was / 4, no minimum)
+    coins: Math.max(2, Math.floor(effLength / 2)), // Section 6: max(2, floor(L / 2))
+    lumber: 0, // Section 6 (v3.0): words never pay Lumber
+    stone: 0, // Section 6 (v3.0): words never pay Stone
     knowledge: Math.ceil(V / 2), // Section 6: ceil(V / 2)
     magic: R, // Section 6: R
   };
 }
 
-/** Section 8: happiness only changes this multiplier. */
-export function happinessMultiplier(happiness: number): number {
-  if (happiness >= 80) return 1.2;
-  if (happiness >= 60) return 1.1;
-  if (happiness >= 40) return 1.0;
-  if (happiness >= 20) return 0.9;
-  return 0.8;
-}
-
 export interface RewardContext {
-  happiness: number;
   /** Section 5: word resubmitted within the last 10 submissions earns half. */
   isRepeat: boolean;
   /** Section 6: a standing Wizard Tower doubles Magic earned from rare letters. */
   wizardTowerStanding: boolean;
+  /** (v3.0) Section 19: High Street effective length (the real length when there is no bonus). */
+  effLength?: number;
+  /** (v3.0) Section 19: a Gilded stamp in the word doubles its Coins (before the repeat halving). */
+  gilded?: boolean;
 }
 
 export interface WordReward {
   total: Resources;
   longWordBonus: boolean;
   halved: boolean;
-  multiplier: number;
 }
 
 /**
- * Applies the Section 5 and 6 rules in this order (the spec does not fix the order of the
- * repeat rule and the floor, so this order is a build interpretation):
- *  1. base formulas; Wizard Tower doubles the rare-letter Magic;
- *  2. happiness multiplier, then round each value down (Section 6);
- *  3. long word bonus: +1 Magic for 7+ letters (Section 5), added after the multiplier;
- *  4. repeat rule: halve everything, rounded down (Section 5);
- *  5. floor of 1 Coin and 1 Lumber on every valid word (Section 6).
+ * Section 5 and 6 (v3.0) word reward, in this order. The happiness multiplier is CUT (LOCKED
+ * amendment ruling 5): rewards pay flat.
+ *  1. base formulas at the effective length; Wizard Tower doubles the rare-letter Magic;
+ *  2. Gilded doubles the Coins (Section 19: before any repeat halving);
+ *  3. long word bonus: +1 Magic for 7+ REAL letters (Section 5; never the effective length);
+ *  4. repeat rule: halve the word reward, rounded down (Section 5; production is never halved);
+ *  5. floor of 1 Coin per valid word (carried).
  */
 export function computeWordReward(word: string, ctx: RewardContext): WordReward {
-  const base = baseReward(word);
-  if (ctx.wizardTowerStanding) base.magic *= 2;
-  const multiplier = happinessMultiplier(ctx.happiness);
-  const total = emptyResources();
-  for (const k of Object.keys(base) as (keyof Resources)[]) {
-    total[k] = Math.floor(base[k] * multiplier + 1e-9);
-  }
+  const total = baseReward(word, ctx.effLength ?? word.length);
+  if (ctx.wizardTowerStanding) total.magic *= 2;
+  if (ctx.gilded) total.coins *= 2;
   const longWordBonus = word.length >= LONG_WORD;
   if (longWordBonus) total.magic += 1;
   if (ctx.isRepeat) {
     for (const k of Object.keys(total) as (keyof Resources)[]) total[k] = Math.floor(total[k] / 2);
   }
   total.coins = Math.max(1, total.coins);
-  total.lumber = Math.max(1, total.lumber);
-  return { total, longWordBonus, halved: ctx.isRepeat, multiplier };
+  return { total, longWordBonus, halved: ctx.isRepeat };
 }
 
 export function isRepeatWord(word: string, recentWords: string[]): boolean {
@@ -251,13 +259,13 @@ export function ensurePlayable(
   let current = rack;
   let freeRedraws = 0;
   while (!rackHasWord(current, minLen, words) && freeRedraws < DEAD_RACK_MAX_REDRAWS) {
-    current = drawRack(rng);
+    current = drawRack(rng, rack.length);
     freeRedraws++;
   }
   return { rack: current, freeRedraws };
 }
 
-// ---------- Section 5 (v2.0): the Hint word ----------
+// ---------- Section 5: the longest word, and (v3.0) the Lantern guide word ----------
 
 /**
  * The longest word that can be made from the rack, ties broken alphabetically so the answer is
@@ -283,3 +291,45 @@ export function longestWord(rack: string[], minLen: number, words: Iterable<stri
 
 /** Section 5 (v2.0): Swap costs 2 Coins per tile. */
 export const SWAP_COST_PER_TILE = 2;
+
+/** Every word of exactly `len` letters the rack can make, sorted alphabetically (capitals). */
+export function wordsOfLength(rack: string[], len: number, words: Iterable<string>): string[] {
+  const have = new Array(26).fill(0);
+  for (const ch of rack) have[ch.charCodeAt(0) - 65]++;
+  const need = new Array(26);
+  const out: string[] = [];
+  outer: for (const w of words) {
+    if (w.length !== len) continue;
+    need.fill(0);
+    for (let i = 0; i < w.length; i++) {
+      const k = w.charCodeAt(i) - 97;
+      if (k < 0 || k > 25 || ++need[k] > have[k]) continue outer;
+    }
+    out.push(w.toUpperCase());
+  }
+  return out.sort();
+}
+
+/**
+ * (v3.0) Section 5, Lantern Hints: the guide word is never the longest word on the rack. It is
+ * the longest word one letter shorter than the longest (ties alphabetical), never shorter than
+ * the tier minimum; if no word exists at that length, the longest word itself (proposed edge rule).
+ */
+export function guideWord(rack: string[], minLen: number, words: string[]): string | null {
+  const longest = longestWord(rack, minLen, words);
+  if (!longest) return null;
+  const shorter = longest.length - 1;
+  if (shorter >= minLen) {
+    const list = wordsOfLength(rack, shorter, words);
+    if (list.length) return list[0];
+  }
+  return longest;
+}
+
+/** (v3.0) Section 5: Lanterns. Start 3, hold 3, +1 per 10 valid words (per 5 with a connected Library). */
+export const LANTERN_START = 3;
+export const LANTERN_MAX = 3;
+export const LANTERN_EVERY = 10;
+export const LANTERN_EVERY_LIBRARY = 5;
+/** (v3.0) Section 5: at most 2 letters placed by Lanterns on one rack. */
+export const LANTERN_LETTERS_PER_RACK = 2;
