@@ -132,6 +132,120 @@
         2,
         2
       ]
+    },
+    "townCenter": {
+      "file": "towncenter.png",
+      "width": 520,
+      "height": 688,
+      "anchorX": 0.5,
+      "anchorY": 0.99419,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ],
+      "placeholder": true
+    },
+    "scribe": {
+      "file": "scribe.png",
+      "width": 520,
+      "height": 628,
+      "anchorX": 0.5,
+      "anchorY": 0.99363,
+      "baseWidth": 512.0,
+      "footprint": [
+        2,
+        2
+      ],
+      "placeholder": true
+    },
+    "landmark-fountain": {
+      "file": "landmark-fountain.png",
+      "width": 264,
+      "height": 428,
+      "anchorX": 0.5,
+      "anchorY": 0.99065,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ],
+      "placeholder": true
+    },
+    "landmark-marketCross": {
+      "file": "landmark-marketCross.png",
+      "width": 264,
+      "height": 428,
+      "anchorX": 0.5,
+      "anchorY": 0.99065,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ],
+      "placeholder": true
+    },
+    "landmark-lanternPost": {
+      "file": "landmark-lanternPost.png",
+      "width": 264,
+      "height": 428,
+      "anchorX": 0.5,
+      "anchorY": 0.99065,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ],
+      "placeholder": true
+    },
+    "landmark-oakArch": {
+      "file": "landmark-oakArch.png",
+      "width": 264,
+      "height": 428,
+      "anchorX": 0.5,
+      "anchorY": 0.99065,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ],
+      "placeholder": true
+    },
+    "landmark-riverBell": {
+      "file": "landmark-riverBell.png",
+      "width": 264,
+      "height": 428,
+      "anchorX": 0.5,
+      "anchorY": 0.99065,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ],
+      "placeholder": true
+    },
+    "landmark-foundersSpire": {
+      "file": "landmark-foundersSpire.png",
+      "width": 264,
+      "height": 428,
+      "anchorX": 0.5,
+      "anchorY": 0.99065,
+      "baseWidth": 256.0,
+      "footprint": [
+        1,
+        1
+      ],
+      "placeholder": true
     }
-  }
+  },
+  "placeholders": [
+    "landmark-foundersSpire",
+    "landmark-fountain",
+    "landmark-lanternPost",
+    "landmark-marketCross",
+    "landmark-oakArch",
+    "landmark-riverBell",
+    "scribe",
+    "townCenter"
+  ]
 }
