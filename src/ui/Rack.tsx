@@ -1,4 +1,10 @@
-// The 8-letter rack and the word box (Build Spec v2.0, Section 5).
+// The rack and the word box (Build Spec v3.0, Sections 5 and 19): the Growing Rack (6 to 9
+// tiles), Workshop stamps drawn on their tiles, Lantern Hints with the Lantern count beside the
+// Hint button, the Rune in its own slot with the letter strip, and the Reserve Shelf directly
+// above the rack (Section 10: no new screen region).
+//
+// Art placeholders (Section 3, until the Gemini pieces land): stamps and the Rune use the letter
+// tile art with a coloured corner mark; the Lantern icon is a small drawn lantern.
 //
 // One input model on every platform: letters enter the word only through the rack. The word box
 // is a display, never a text field, and nothing in the word area can take keyboard focus, so no
@@ -12,18 +18,45 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   LONG_PRESS_MS,
+  SHELF_LOCKED_LINE,
   cancelSwap,
+  chooseRuneLetter,
   clearWord,
   deleteLast,
+  noLanternLine,
   pressHint,
   pressSwap,
+  removeFromWord,
   rerollRack,
+  shelfUnlocked,
   submitWord,
   swapStatus,
+  tapRune,
+  tapShelf,
   tapTile,
   useGame,
 } from '../game/store';
+import { RUNE_ID, STAMP_NAMES } from '../game/stamps';
+import { realBuildings } from '../game/buildings';
+import type { RackTile } from '../game/types';
 import { RARE, REROLL_MAX, minWordLength } from '../game/words';
+
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+/** Placeholder Lantern icon (Section 3: a Gemini commission; drawn here until it lands). */
+export function LanternIcon() {
+  return (
+    <svg className="lantern-icon" viewBox="0 0 16 20" width="13" height="16" aria-hidden>
+      <path d="M5 3h6M8 1v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <rect x="3.5" y="4" width="9" height="12" rx="2.5" fill="#f2c14e" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5 18h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="10" r="2" fill="#fff4c2" />
+    </svg>
+  );
+}
+
+const stampClass = (t: { stamp?: string }) => (t.stamp ? ` tile-stamp tile-stamp-${t.stamp}` : '');
+const stampTitle = (t: RackTile) => (t.stamp ? ` ${STAMP_NAMES[t.stamp]} stamp.` : '');
 
 /** Keeps a press from moving focus (so a tap never focuses anything, Section 5). */
 const noFocus = (e: ReactMouseEvent) => e.preventDefault();
@@ -75,6 +108,34 @@ function DeleteKey({ disabled }: { disabled: boolean }) {
   );
 }
 
+/** (v3.0) Section 19: the Reserve Shelf, directly above the rack. Shown once a Scribe has stood. */
+function Shelf() {
+  const shelf = useGame((s) => s.shelf);
+  const armed = useGame((s) => s.shelfArmed);
+  const hasScribe = useGame((s) => realBuildings(s.buildings).some((b) => b.type === 'scribe'));
+  useGame((s) => s.net);
+  if (!hasScribe && !shelf) return null;
+  const open = shelfUnlocked();
+  return (
+    <div className={`shelf${open ? '' : ' shelf-locked'}${armed ? ' shelf-armed' : ''}`} aria-label="Reserve Shelf">
+      <span className="shelf-label">Shelf</span>
+      <button
+        type="button"
+        className={`tile shelf-slot${shelf ? stampClass(shelf) : ' shelf-empty'}`}
+        tabIndex={-1}
+        onMouseDown={noFocus}
+        onClick={tapShelf}
+        title={open ? (shelf ? `Swap ${shelf.letter} back into your rack.` : 'Set one letter aside.') : SHELF_LOCKED_LINE}
+      >
+        {shelf?.letter ?? ''}
+      </button>
+      <span className="shelf-note">
+        {!open ? SHELF_LOCKED_LINE : armed ? (shelf ? 'Tap a rack tile to swap with it, or the shelf again for the rightmost tile.' : 'Tap a rack tile to set it aside.') : shelf ? 'Tap the shelf to swap it back.' : 'Tap the shelf, then a tile, to set a letter aside.'}
+      </span>
+    </div>
+  );
+}
+
 export function Rack() {
   const rack = useGame((s) => s.rack);
   const word = useGame((s) => s.word);
@@ -83,7 +144,10 @@ export function Rack() {
   const rerolls = useGame((s) => s.rerolls);
   const tier = useGame((s) => s.tier);
   const coins = useGame((s) => s.resources.coins);
-  const submitLocked = useGame((s) => !s.locks.submit || !!s.preview);
+  const lanterns = useGame((s) => s.lanterns);
+  const hint = useGame((s) => s.hint);
+  const rune = useGame((s) => s.rune);
+  const submitLocked = useGame((s) => !s.locks.submit || !!s.pieceGhost?.anchor);
   const [shaking, setShaking] = useState<string | null>(null);
   const min = minWordLength(tier);
 
@@ -96,12 +160,21 @@ export function Rack() {
   }, [shake]);
 
   const byId = new Map(rack.map((t) => [t.id, t]));
-  const placed = word.map((id) => byId.get(id)).filter((t): t is NonNullable<typeof t> => !!t);
+  const runeIn = word.includes(RUNE_ID);
+  const placed = word
+    .map((id) => (id === RUNE_ID ? { id: RUNE_ID, letter: rune.letter ?? '?', used: true, rune: true } : byId.get(id)))
+    .filter((t): t is NonNullable<typeof t> => !!t);
   void coins; // re-render when Coins change, so the Swap price line stays right
   const sw = swapStatus();
+  const hintTitle = !hint.freeUsed
+    ? 'Free: names the length of the longest word.'
+    : lanterns > 0
+      ? 'Spend a Lantern to place the next letter of a guide word (up to 2 letters on this rack).'
+      : noLanternLine();
 
   return (
     <div className={`rack panel${swap.active ? ' rack-swapping' : ''}`} aria-label="Word game" data-tour="rack">
+      <Shelf />
       <div className="word-row">
         {/* The word box: a display only. Tapping it does nothing; tapping a placed letter takes it back. */}
         <div className="word-box" aria-label="Your word" aria-live="polite">
@@ -111,9 +184,9 @@ export function Rack() {
             placed.map((t) => (
               <span
                 key={t.id}
-                className={`word-letter${RARE.has(t.letter) ? ' tile-rare' : ''}`}
-                onClick={() => tapTile(t.id)}
-                title={`Take ${t.letter} back`}
+                className={`word-letter${RARE.has(t.letter) ? ' tile-rare' : ''}${'rune' in t ? ' tile-rune' : stampClass(t as RackTile)}`}
+                onClick={() => ('rune' in t ? removeFromWord(RUNE_ID) : tapTile(t.id))}
+                title={'rune' in t ? 'Take the Rune back' : `Take ${t.letter} back`}
               >
                 {t.letter}
               </span>
@@ -122,6 +195,15 @@ export function Rack() {
         </div>
         <DeleteKey disabled={placed.length === 0} />
       </div>
+      {runeIn && (
+        <div className="rune-strip" role="group" aria-label="Choose the Rune's letter">
+          {LETTERS.map((L) => (
+            <button key={L} type="button" tabIndex={-1} onMouseDown={noFocus} className={`rune-letter${rune.letter === L ? ' rune-letter-on' : ''}`} onClick={() => chooseRuneLetter(L)}>
+              {L}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="rack-tiles" role="group" aria-label="Your letters">
         {rack.map((t) => {
@@ -134,31 +216,49 @@ export function Rack() {
             shaking === t.letter && t.used ? 'tile-shake' : '',
           ]
             .filter(Boolean)
-            .join(' ');
+            .join(' ') + stampClass(t);
           return (
             <button
               type="button"
               key={t.id}
               data-tile-id={t.id}
+              data-stamp={t.stamp ?? undefined}
               className={cls}
               tabIndex={-1}
               onMouseDown={noFocus}
               onClick={() => tapTile(t.id)}
-              title={swap.active ? (t.used ? 'In your word: take it back first' : selected ? 'Keep this tile' : 'Swap this tile') : t.used ? `Take ${t.letter} back` : RARE.has(t.letter) ? 'Rare letter: earns Magic' : `Add ${t.letter}`}
+              title={(swap.active ? (t.used ? 'In your word: take it back first' : selected ? 'Keep this tile' : 'Swap this tile') : t.used ? `Take ${t.letter} back` : RARE.has(t.letter) ? 'Rare letter: earns Magic' : `Add ${t.letter}`) + stampTitle(t)}
               aria-pressed={swap.active ? selected : t.used}
             >
               {t.letter}
             </button>
           );
         })}
+        {rune.held && (
+          <button
+            type="button"
+            className={`tile tile-rune rune-slot${runeIn ? ' tile-used' : ''}`}
+            tabIndex={-1}
+            onMouseDown={noFocus}
+            onClick={tapRune}
+            title={runeIn ? 'Take the Rune back' : 'The Rune: a wild letter you choose. Tap to add it to your word.'}
+            aria-label="Rune tile"
+          >
+            {runeIn ? rune.letter ?? '?' : 'ᚱ'}
+          </button>
+        )}
       </div>
 
       <div className="rack-controls">
         <button type="button" className="pill pill-primary submit-button" tabIndex={-1} onMouseDown={noFocus} onClick={() => submitWord()} disabled={submitLocked} data-tour="submit">
           Submit
         </button>
-        <button type="button" className="pill hint-button" tabIndex={-1} onMouseDown={noFocus} onClick={pressHint} title="Free: names the length, then the first letter, then the word">
-          Hint
+        <button type="button" className="pill hint-button" tabIndex={-1} onMouseDown={noFocus} onClick={pressHint} title={hintTitle} data-tour="hint">
+          Hint{' '}
+          <span className="pill-count lantern-count" aria-label={`${lanterns} Lanterns`}>
+            <LanternIcon />
+            {lanterns}
+          </span>
         </button>
         <button type="button" className={`pill swap-button${swap.active ? ' pill-selected' : ''}`} tabIndex={-1} onMouseDown={noFocus} onClick={pressSwap} disabled={sw.disabled}>
           {sw.label}
@@ -174,13 +274,14 @@ export function Rack() {
             tabIndex={-1}
             onMouseDown={noFocus}
             onClick={rerollRack}
-            title="Replace all 8 letters. You earn 1 reroll per 5 valid words, up to 3."
+            title="Replace every letter. You earn 1 reroll per 5 valid words, up to 3."
           >
             Reroll <span className="pill-count">{rerolls}/{REROLL_MAX}</span>
           </button>
         )}
       </div>
       {sw.note && <p className="swap-note">{sw.note}</p>}
+      {hint.freeUsed && lanterns === 0 && !swap.active && <p className="swap-note lantern-note">{noLanternLine()}</p>}
     </div>
   );
 }
