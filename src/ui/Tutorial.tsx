@@ -6,8 +6,8 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { goToTitle } from '../game/session';
-import { FRAMES, OFF_PLOT_CAPTION, ORDER_RETRY, STEP6_RETRY, STEP_COUNT } from '../game/tutorial';
-import { backToTown, endTutorial, getTutorial, nextFrame, skipTutorial, subscribeTutorial, tutorialFromTown } from '../game/tutorialFlow';
+import { FRAMES, OFF_PLOT_CAPTION, ORDER_RETRY, PLACE_ON_PLOT, PLOT_BLOCKED_CAPTION, STEP6_RETRY, STEP_COUNT } from '../game/tutorial';
+import { backToTown, endTutorial, getTutorial, nextFrame, placeOnMarkedPlot, skipTutorial, subscribeTutorial, tutorialFromTown } from '../game/tutorialFlow';
 import { CardCopy } from './BuildPanel';
 import { isPhone, setUi } from './uiState';
 
@@ -54,22 +54,34 @@ export function TutorialCaption() {
       ? [STEP6_RETRY]
       : t.frame === 'order' && t.retry
         ? [ORDER_RETRY]
+      : (t.frame === 'cottage' || t.frame === 'sawmill') && t.plotBlocked
+        ? [PLOT_BLOCKED_CAPTION[t.frame]]
       : (t.frame === 'cottage' || t.frame === 'sawmill') && t.offPlot
         ? [OFF_PLOT_CAPTION[t.frame]]
         : lines;
+  const buildStep = t.frame === 'cottage' || t.frame === 'sawmill' ? t.frame : null;
 
   return (
     <div className={`tutorial-caption panel tutorial-${frame.kind}`} role="dialog" aria-label={`Tutorial step ${frame.step}`} aria-live="polite">
       <p className="tutorial-step">
         Step {frame.step} of {STEP_COUNT} · {frame.title}
       </p>
-      {t.frame === 'cottage' && isPhone() && <CardCopy type="cottage" />}
-      <div className="tutorial-text">
-        {text.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
+      {/* (v3.0.1) The body scrolls inside the card's capped height; the buttons stay in view. */}
+      <div className="tutorial-body">
+        <div className="tutorial-text">
+          {text.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
+        {t.frame === 'cottage' && isPhone() && <CardCopy type="cottage" />}
       </div>
       <div className="tutorial-buttons">
+        {/* (v3.0.1) The one-tap assist: the easy path; manual placement stays available. */}
+        {buildStep && (
+          <button className="pill pill-primary tutorial-assist" data-assist={buildStep} onClick={() => placeOnMarkedPlot()}>
+            {PLACE_ON_PLOT[buildStep]}
+          </button>
+        )}
         {frame.kind === 'read' && (
           <button className="pill pill-primary" onClick={nextFrame}>
             Next
