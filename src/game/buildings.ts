@@ -2,7 +2,7 @@
 // Costs and production: Build Spec v3.0 Section 6. Footprints, tiers, terrain rules, the
 // placement ghost reasons and the build card text: Section 7. Population and happiness:
 // Section 8 (the multiplier is cut, LOCKED amendment ruling 5). Art: the approved Gemini
-// sprites in src/assets/buildings/ (Section 3); the v3.0 pieces are placeholders until the art lands.
+// sprites in src/assets/buildings/ (Section 3); the v3.0 pieces have their Gemini art since v3.0.2.
 
 import { Terrain, emptyResources, type Building, type BuildingType, type LandmarkId, type Resources, type Tier } from './types';
 
