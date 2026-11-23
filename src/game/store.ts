@@ -65,10 +65,13 @@ import { DISCARD_EVERY, OPEN_ORDERS, condText, makeOrder, meets, type Order } fr
 import { FIRST_STAMP_LINE, RUNE_EVERY, RUNE_ID, STAMP_NAMES, STAMP_PAY, STAMP_SOURCE, emptyCounters, stepStamps, type StampCounters } from './stamps';
 import { LANDMARK_ORDER, LANDMARK_STAYS, earnedLine, landmarkFreeLine, landmarksEarnedBy, RIVER_BELL_TILES } from './landmarks';
 import { GRAVEL_STONE, GROWTH_EVERY, OVERFLOW_EVERY, applyLand, growthStep, overflowStep, type LandChange } from './terrainChange';
+import { roomiestSpot } from './founding';
 import { makeSave, restoreGame, type MigrationNotes, type SaveData, type SavedCamera } from './save';
 import {
   MAP_H,
   MAP_W,
+  TILE_H,
+  TILE_W,
   Terrain,
   emptyResources,
   type Building,
@@ -363,33 +366,12 @@ export function freshLifetime(): Lifetime {
  * ring to the whole map. Returns the footprint's top-left tile, or null if none fits anywhere.
  */
 export function foundingSpot(tiles: Uint8Array, cleared: Uint8Array, occupied: (x: number, y: number) => boolean, gravel?: Uint8Array): Pt | null {
-  const d = BUILDINGS.townCenter;
-  const fits = (x: number, y: number) => {
-    for (let yy = y; yy < y + d.h; yy++)
-      for (let xx = x; xx < x + d.w; xx++) {
-        if (xx < 0 || yy < 0 || xx >= MAP_W || yy >= MAP_H) return false;
-        const i = yy * MAP_W + xx;
-        if (effectiveAt(tiles, cleared, i) !== Terrain.Meadow || occupied(xx, yy) || gravel?.[i]) return false;
-      }
-    return true;
-  };
-  const cx = 27;
-  const cy = 27;
-  for (let r = 0; r < MAP_W; r++) {
-    let best: Pt | null = null;
-    let bestD = Infinity;
-    for (let y = cy - r; y <= cy + r; y++)
-      for (let x = cx - r; x <= cx + r; x++) {
-        if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== r || !fits(x, y)) continue;
-        const dd = Math.hypot(x - cx, y - cy);
-        if (dd < bestD) {
-          bestD = dd;
-          best = { x, y };
-        }
-      }
-    if (best) return best;
-  }
-  return null;
+  // (v3.0.1) Stu's roomier-founding ruling: the roomiest fitting spot in the middle band (founding.ts).
+  return roomiestSpot((x, y) => {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
+    const i = y * MAP_W + x;
+    return effectiveAt(tiles, cleared, i) === Terrain.Meadow && !occupied(x, y) && !gravel?.[i];
+  });
 }
 
 function freshState(seedInput: unknown, opts: { sandbox?: boolean; noCenter?: boolean } = {}): GameState {
@@ -525,9 +507,19 @@ export const hooks: {
    * marked plot), checked after the normal Section 7 reasons. Null when the spot is fine.
    */
   placementGuard?: (type: BuildingType, x: number, y: number) => string | null;
-  /** Tutorial build steps only: a reason Remove may not act on this tile. Null when it may. */
-  removeGuard?: (x: number, y: number, b: Building | undefined) => string | null;
+  /**
+   * Tutorial build steps only: a reason Remove may not act on this tile (a building, or else the
+   * road or bridge piece on it). Null when it may.
+   */
+  removeGuard?: (x: number, y: number, b: Building | undefined, piece: Piece | undefined) => string | null;
   onRemoved?: (b: Building) => void;
+  /** (v3.0.1) A road or bridge piece left the map through Remove (the tutorial's safety net listens). */
+  onPieceRemoved?: (piece: Piece) => void;
+  /**
+   * (v3.0.1) Tutorial road steps only: the tiles of a piece that would cover a reserved plot, and
+   * the reason. Null (or no tiles) when the piece is clear of every reserved plot.
+   */
+  pieceGuard?: (tiles: Pt[]) => { tiles: Pt[]; reason: string } | null;
   /** (v3.0) A road or bridge piece was bought (the tutorial's wallet handling listens). */
   onBought?: (kind: PieceKind, len: PieceLen) => void;
 } = {};
@@ -1656,7 +1648,7 @@ export function startNewGame(seedInput?: string, opts: { sandbox?: boolean } = {
     store.state.message = {
       id: ++messageCounter,
       kind: 'success',
-      text: `A new town on a fresh map (seed "${fresh.terrain.seedText}"). Your town center stands at the middle: buy a road piece and connect your first building to it.`,
+      text: `A new town on a fresh map (seed "${fresh.terrain.seedText}"). Your town center stands on open meadow with room to grow: buy a road piece and connect your first building to it.`,
     };
   }
   fillOrders(); // Section 18: a new town starts with 3 open orders
@@ -1665,10 +1657,18 @@ export function startNewGame(seedInput?: string, opts: { sandbox?: boolean } = {
   emitWholeTown();
 }
 
-/** Section 18: the camera starts centred on the town center. */
+/**
+ * Section 18: the camera starts centred on the town center. (v3.0.1) Set as the camera the map
+ * applies when the town loads: in v3.0.0 this was a pan goal that the load cancelled, which went
+ * unnoticed while the town center always stood near the middle of the map.
+ */
 function focusTownCenter(): void {
   const tc = store.state.buildings.find((b) => b.type === 'townCenter');
-  if (tc) store.state.cameraGoal = { x: tc.x + 1, y: tc.y + 1, id: ++goalCounter };
+  if (!tc) return;
+  // The world point at the middle of the 2 by 2 footprint (its shared corner, grid point x+1, y+1).
+  const gx = tc.x + 1;
+  const gy = tc.y + 1;
+  store.state.pendingCamera = { centreX: MAP_H * (TILE_W / 2) + (gx - gy) * (TILE_W / 2), centreY: (gx + gy) * (TILE_H / 2), zoom: 1 };
 }
 
 /**
@@ -2016,7 +2016,15 @@ export function pieceStatus(): PieceStatus | null {
     g.dir,
     g.len,
   );
-  return { ...c, kind: g.kind, len: g.len, dir: g.dir, tiles: pieceTiles({ ...g.anchor, dir: g.dir, len: g.len }), pinned: s.pieceGhostPinned };
+  const tiles = pieceTiles({ ...g.anchor, dir: g.dir, len: g.len });
+  const base = { kind: g.kind, len: g.len, dir: g.dir, tiles, pinned: s.pieceGhostPinned };
+  // (v3.0.1) Tutorial road steps: a piece may not cover a marked plot. The tiles over the plot
+  // turn red; a terrain reason on another tile still speaks first.
+  const guard = hooks.pieceGuard?.(tiles);
+  if (guard && guard.tiles.length) {
+    return { ...c, ...base, ok: false, reason: c.badTiles.length ? c.reason : guard.reason, badTiles: [...c.badTiles, ...guard.tiles] };
+  }
+  return { ...c, ...base };
 }
 
 /** Confirm: places the piece and takes it out of the bank. Nothing is charged (it was paid for). */
@@ -2257,6 +2265,24 @@ export function confirmPlacement(): boolean {
   return ok;
 }
 
+/**
+ * (v3.0.1) The tutorial's one-tap assist: places a building with its footprint origin at (x, y)
+ * through the normal placement path (same checks, cost and message), as if the ghost had been
+ * pinned there and Confirm tapped.
+ */
+export function placeBuildingAt(type: BuildingType, x: number, y: number): boolean {
+  const s = store.state;
+  if (s.tool !== type) setTool(type);
+  s.placement = { type, at: { x, y }, pinned: true };
+  store.emit('preview');
+  const ok = confirmPlacement();
+  if (!ok && s.placement?.type === type) {
+    s.placement = { type, at: null, pinned: false };
+    store.emit('preview');
+  }
+  return ok;
+}
+
 /** Places a building with its footprint origin at (x, y). Costs are deducted only on success. */
 function placeAt(type: BuildingType, x: number, y: number): boolean {
   const s = store.state;
@@ -2337,7 +2363,8 @@ export function requestRemoveAt(x: number, y: number): void {
   const s = store.state;
   if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return;
   const b = buildingAt(s.buildings, x, y);
-  const guard = hooks.removeGuard?.(x, y, b);
+  const onTile = b ? undefined : s.pieces.find((p) => p.id === s.pieceAt[y * MAP_W + x]);
+  const guard = hooks.removeGuard?.(x, y, b, onTile);
   if (guard) {
     say(guard, 'info');
     return;
@@ -2419,6 +2446,7 @@ export function confirmRemoval(): void {
     store.emit('roads', 'buildings', 'resources', 'meta', 'preview');
     announceProgress();
     for (const b of cascade) hooks.onRemoved?.(b);
+    hooks.onPieceRemoved?.(piece);
     return;
   }
   if (!s.buildings.some((b) => b.id === p.buildingId)) {
