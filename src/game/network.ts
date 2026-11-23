@@ -3,7 +3,7 @@
 // Sections 4, 18 and 19). Pure rules: no React, no Pixi, no store.
 
 import { BUILDINGS, buildingAt, effectiveAt } from './buildings';
-import { AXIS_EW, AXIS_NS, LINK_BRIDGE, LINK_NONE, LINK_ROAD, bridgeAllowedOn, roadAllowedOn, type Pt } from './roads';
+import { AXIS_BOTH, AXIS_EW, AXIS_NS, LINK_BRIDGE, LINK_NONE, LINK_ROAD, bridgeAllowedOn, roadAllowedOn, type Pt } from './roads';
 import { MAP_H, MAP_W, Terrain, type Building, type BuildingType, type Resources } from './types';
 
 export type PieceKind = 'road' | 'bridge';
@@ -66,13 +66,16 @@ export function gridsFromPieces(pieces: Piece[]): { roads: Uint8Array; bridgeAxi
   const roads = new Uint8Array(MAP_W * MAP_H);
   const bridgeAxis = new Uint8Array(MAP_W * MAP_H);
   const pieceAt = new Int32Array(MAP_W * MAP_H);
+  // (v3.0.2) Pieces may share tiles (crossings; see sharedTiles). A tile stays on the map while
+  // any piece covers it; pieceAt names the most recently laid piece on it (the one a tap removes).
+  // A bridge tile crossed by bridges along both axes draws both decks (AXIS_BOTH).
   for (const p of pieces) {
     const axis = p.axis ?? (p.dir === 0 || p.dir === 2 ? AXIS_EW : AXIS_NS);
     for (const t of pieceTiles(p)) {
       if (!inMap(t.x, t.y)) continue;
       const i = t.y * MAP_W + t.x;
       roads[i] = p.kind === 'road' ? LINK_ROAD : LINK_BRIDGE;
-      if (p.kind === 'bridge') bridgeAxis[i] = axis;
+      if (p.kind === 'bridge') bridgeAxis[i] = bridgeAxis[i] && bridgeAxis[i] !== axis ? AXIS_BOTH : axis;
       pieceAt[i] = p.id;
     }
   }
@@ -154,11 +157,29 @@ export interface PieceCheck {
   badTiles: Pt[];
 }
 
+/**
+ * (v3.0.2) The overlap rule, settled with Boone (Nov 23, 2026): a piece may cross or run over
+ * tiles already laid by pieces of its own kind (road over road, bridge over bridge). A shared tile
+ * is one network tile (a junction where the pieces cross); the piece still costs what it cost to
+ * buy, and its shared tiles are simply already there. A piece must lay at least one new tile.
+ * A road can never share a tile with a bridge, so every tile always suits every piece on it.
+ */
+export const REASON_ROAD_ON_BRIDGE = 'That tile is a bridge. A road piece can cross roads, not bridges.';
+export const REASON_BRIDGE_ON_ROAD = 'That tile is a road. A bridge piece can cross bridges, not roads.';
+export const REASON_NOTHING_NEW = { road: 'That road is already there.', bridge: 'That bridge is already there.' } as const;
+
+/** (v3.0.2) True when this tile already holds a laid tile of the same kind (a crossing tile). */
+function sharesTile(ctx: PieceContext, kind: PieceKind, i: number): boolean {
+  return ctx.roads[i] === (kind === 'road' ? LINK_ROAD : LINK_BRIDGE);
+}
+
 /** Section 4: why one tile cannot take this kind of piece, or null. */
 function tileReason(ctx: PieceContext, kind: PieceKind, x: number, y: number): string | null {
   if (!inMap(x, y)) return 'Part of the piece is off the map.';
   const i = y * MAP_W + x;
-  if (ctx.roads[i] !== LINK_NONE || buildingAt(ctx.buildings, x, y)) return 'That tile is already built on.';
+  if (buildingAt(ctx.buildings, x, y)) return 'That tile is already built on.';
+  if (sharesTile(ctx, kind, i)) return null; // (v3.0.2) a crossing: the tile is already there
+  if (ctx.roads[i] !== LINK_NONE) return kind === 'road' ? REASON_ROAD_ON_BRIDGE : REASON_BRIDGE_ON_ROAD;
   const t = ctx.tiles[i];
   const changed = ctx.cleared[i] === 1;
   if (kind === 'bridge') return bridgeAllowedOn(t, changed) ? null : 'Bridges need water or marsh.';
@@ -201,7 +222,11 @@ export function checkPiece(ctx: PieceContext, kind: PieceKind, anchor: Pt, dir: 
     }
   }
   if (reason) return { ok: false, reason, badTiles: bad };
+  // (v3.0.2) A piece that lies wholly on tiles already laid adds nothing.
+  if (tiles.every((t) => sharesTile(ctx, kind, t.y * MAP_W + t.x))) return { ok: false, reason: REASON_NOTHING_NEW[kind], badTiles: tiles };
   const own = new Set(tiles.map((t) => t.y * MAP_W + t.x));
+  // A shared tile that is already on the network joins the piece to it directly.
+  const sharesNet = tiles.some((t) => ctx.net[t.y * MAP_W + t.x] === 1);
   const around = (t: Pt, test: (j: number) => boolean) =>
     N4.some(([dx, dy]) => {
       const nx = t.x + dx;
@@ -211,16 +236,26 @@ export function checkPiece(ctx: PieceContext, kind: PieceKind, anchor: Pt, dir: 
       return !own.has(j) && test(j);
     });
   if (kind === 'road') {
-    const joins = tiles.some((t) => around(t, (j) => ctx.net[j] === 1));
+    const joins = sharesNet || tiles.some((t) => around(t, (j) => ctx.net[j] === 1));
     return joins ? { ok: true, reason: null, badTiles: [] } : { ok: false, reason: REASON_ROAD_CONNECT, badTiles: [] };
   }
   const ends = [tiles[0], tiles[tiles.length - 1]];
   const centre = new Set(centerTiles(ctx.buildings));
-  const lands = ends.some((t) => around(t, (j) => ctx.net[j] === 1 || centre.has(j) || ctx.roads[j] !== LINK_NONE || isLand(ctx, j)));
+  const lands =
+    sharesNet || ends.some((t) => ctx.roads[t.y * MAP_W + t.x] !== LINK_NONE) || ends.some((t) => around(t, (j) => ctx.net[j] === 1 || centre.has(j) || ctx.roads[j] !== LINK_NONE || isLand(ctx, j)));
   return lands ? { ok: true, reason: null, badTiles: [] } : { ok: false, reason: REASON_BRIDGE_LAND, badTiles: [] };
 }
 
 // ---------- removal and the cascade (Section 4; LOCKED rulings 2 and 9) ----------
+
+/**
+ * (v3.0.2) The tiles of a piece that another laid piece also covers. They stay on the map when
+ * this piece is removed (a tile belongs to the network, not to one piece).
+ */
+export function sharedTiles(pieces: Piece[], piece: Piece): Pt[] {
+  const others = gridsFromPieces(pieces.filter((p) => p.id !== piece.id)).roads;
+  return pieceTiles(piece).filter((t) => inMap(t.x, t.y) && others[t.y * MAP_W + t.x] !== LINK_NONE);
+}
 
 /**
  * The buildings that lose their connection when this piece leaves the map: connected before and
