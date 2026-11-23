@@ -1,6 +1,6 @@
 // Building layer (Build Spec v3.0, Sections 3, 10 and 13).
-// (v3.0) The Town Center, the Scribe and the six landmarks use placeholder sprites in the same
-// slots (scripts/art/make_placeholders.py) until their Gemini art lands (Section 3).
+// (v3.0) The Town Center, the Scribe and the six landmarks have their own sprites in the same
+// slots as the other buildings. (v3.0.2) Their Gemini art is in (scripts/art/process_v3_art.py).
 // v2.0 polish (Section 13): every building is grounded with a soft ground tint and a contact
 // shadow under its footprint, drawn on one Graphics under the sprites, so buildings sit in the
 // terrain instead of floating on it. It redraws only when the buildings change.
