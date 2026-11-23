@@ -1,8 +1,9 @@
-// Town panel (Build Spec v2.0, Sections 9 and 17): the current quest with its progress and reward,
+// Town panel (Build Spec v3.0, Sections 9, 12, 17 and 19): the current quest with its progress and reward,
 // and what the next tier needs. Quests are optional and never expire, so this panel only
 // informs; nothing here can be failed or missed.
 
-import { useGame, nextTierRequirements, progressInputs } from '../game/store';
+import { useGame, disconnectedBuildings, highStreetNow, nextTierRequirements, progressInputs } from '../game/store';
+import { buildingName } from '../game/buildings';
 import { CHAIN_COMPLETE, FREE_PLAY, QUESTS, type Requirement } from '../game/progress';
 import { formatResources } from '../game/words';
 
@@ -78,10 +79,36 @@ export function TownPanel() {
           </p>
         )}
       </div>
+      <TownNotes />
       <div className="tier-progress">
         <h3>{tier >= 3 ? 'Tier 3: every building unlocked' : `Next: Tier ${tier + 1}`}</h3>
         {nextTier.length > 0 && <Checklist items={nextTier} />}
       </div>
     </section>
+  );
+}
+
+/**
+ * (v3.0) Section 12: buildings that stand but are not connected are listed with the not-connected
+ * line; Section 19: the current High Street bonus.
+ */
+function TownNotes() {
+  useGame((s) => s.net);
+  useGame((s) => s.buildings);
+  const cut = disconnectedBuildings();
+  const street = highStreetNow();
+  return (
+    <div className="town-notes">
+      <p className="high-street">
+        {street.bonus > 0 ? `High Street bonus: plus ${street.bonus} length.` : 'No High Street yet. A straight road of 6 or more tiles, with buildings beside it, makes your words pay longer.'}
+      </p>
+      {cut.length > 0 && (
+        <ul className="disconnected" aria-label="Not connected">
+          {cut.map((b) => (
+            <li key={b.id}>{buildingName(b)} is not connected to the town center and pays nothing.</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
