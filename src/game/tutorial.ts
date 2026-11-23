@@ -126,6 +126,7 @@ export type Highlight =
   | 'message'
   | 'hud-resources'
   | 'road-tool'
+  | 'roads'
   | 'cottage-card'
   | 'sawmill-card'
   | 'happiness'
@@ -264,8 +265,10 @@ export const FRAMES: Record<string, Frame> = {
     step: 8,
     title: STEP_TITLES[8],
     kind: 'action',
-    highlight: 'road-tool',
-    text: 'Buildings sit beside a road, and roads come in pieces of 3, 4 or 5 tiles. Choose Road, buy a 3 tile piece, and pick it from your bank. Tap the marked tile next to the town center to start the piece there, use Rotate to point it, then Confirm. A piece must touch your network, and nothing is placed until you Confirm.',
+    highlight: 'roads',
+    // (v3.0.2) Taught through the on-map Roads button (Stu's ruling: buy in Build, place from on
+    // screen). The town gives the first piece, so this step is only about laying one. BUILD WORDING.
+    text: 'Buildings sit beside a road, and roads come in pieces of 3, 4 or 5 tiles. Your town has given you your first piece. Tap Roads over the map and pick the 3 tile road. Tap the marked tile next to the town center to start it there, use Rotate to point it, then Confirm. A piece must touch your network, and nothing is placed until you Confirm.',
   },
   cottage: {
     step: 9,
@@ -290,7 +293,8 @@ export const FRAMES: Record<string, Frame> = {
     kind: 'action',
     highlight: 'sawmill-card',
     text: [
-      'Words never pay Lumber, so your town needs a workshop. Lay another road piece from the marked tile so it ends beside the marked Sawmill plot, then place the Sawmill on the plot. It sits beside the forest it cuts.',
+      // (v3.0.2) Buying is taught here, in Build; laying stays on the Roads button. BUILD WORDING.
+      'Words never pay Lumber, so your town needs a workshop. Pieces are bought in Build: buy a 3 tile road piece there, then lay it from Roads, starting on the marked tile so it ends beside the marked Sawmill plot. Then place the Sawmill on the plot. It sits beside the forest it cuts.',
       'Once the road is in, the button below can place the Sawmill for you.',
     ],
   },
