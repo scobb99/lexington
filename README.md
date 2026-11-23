@@ -2,7 +2,15 @@
 
 A cozy, word-driven city builder. Built to **Build Spec v3.0** with the Nov 22, 2026 lock amendment.
 
-**Status: v3.0.1 is built** (a patch on v3.0.0; no rule, cost or economy changes):
+**Status: v3.0.2 is built** (a patch on v3.0.1; no cost, reward or economy changes):
+
+- **Roads button over the map:** buy pieces in Build, then tap **Roads** (top left of the map) to see your banked road and bridge pieces and lay one straight away. How to Play now teaches this.
+- **Crossing roads:** a road piece can cross another road (and a bridge another bridge). The shared tile becomes a junction. Removing one of the two pieces never removes a tile the other piece still covers.
+- **Hint:** the first Hint's answer ("Longest word: N letters") now stays beside the rack until the letters change, and a Hint pressed while the word list is still loading waits and then answers.
+- **Phones:** the game keeps itself inside the visible screen in mobile Safari, a pinch on the map zooms the map (never the page), buttons are bigger, Build comes before the town goals, and a tap places a building's ghost where you tap.
+- **New art:** the Town Center, the Scribe, the six landmarks, the stamps, the Rune tile, the Lantern icon and new grey-rock foothills.
+
+v3.0.1 (a patch on v3.0.0):
 
 - **Tutorial fix:** a road piece can no longer cover the marked Cottage or Sawmill plot (the ghost turns red and says why), so the Cottage step can always be finished. If a piece is ever on the plot anyway, Remove can take it off and it goes back to the bank.
 - **Easier building steps:** the tutorial card has a **Place the Cottage on the marked plot** button (and one for the Sawmill). Placing by hand still works.
@@ -36,17 +44,18 @@ What changed from v2 to v3.0:
 ### On a computer
 
 - **Look around:** drag the map, or scroll to zoom.
+- **Roads:** click **Roads** at the top left of the map to see your banked pieces; click one to start laying it.
 - **Spell a word:** click letter tiles, or just type letters. **Backspace** removes the last letter, **Enter** plays the word.
 - **Hint:** the first click on a rack is free. Each click after that spends a Lantern and places a letter.
 - **Orders:** click **Orders** (beside "Build") to see the three Commission orders.
 - **Roads and bridges:**
-  1. Click **Road** (or **Bridge**). The bank opens.
-  2. Click **Buy** on a length to buy a piece (charged once). Then click the piece in the bank.
+  1. Buy: in Build, click **Road** (or **Bridge**) and click **Buy** on a length (charged once).
+  2. Lay: click **Roads** over the map and click the piece (or click it in the bank).
   3. Move the mouse over the map and click where the piece should start.
   4. Click **Rotate** until it points the way you want. Green means it can go there; red says why not.
   5. Click **Confirm** (or press **Enter**). Laying a piece costs nothing.
 
-  **Cancel**, **Esc** or a right-click puts the piece back in the bank.
+  **Cancel**, **Esc** or a right-click puts the piece back in the bank. A piece may cross a road you have already laid; the shared tile becomes a junction.
 - **Remove:** click **Remove**, then a piece or building. If removing a piece would cut buildings off from the town center, the warning names them first.
 - **Clear / Drain:** click the tool, then click one tile at a time. Clearing gravel is free and gives 3 Stone.
 - **Place a building:** click its card, click the map to pin the ghost, then **Confirm**. (In How to Play, the Cottage and Sawmill steps also have a button that places the building on the marked plot for you.)
@@ -55,9 +64,10 @@ What changed from v2 to v3.0:
 ### On a phone
 
 - **Spell a word:** tap letter tiles, then **Submit**. Hold the delete key for half a second to clear the word.
-- **Build:** tap **Build** to slide up the panel. For Road or Bridge the panel stays open so you can buy; tap a piece in the bank and the panel closes. Tap the map where the piece starts, **Rotate**, then **Confirm**.
+- **Roads:** tap **Roads** (top left) and tap a piece. Tap the map where the piece starts, **Rotate**, then **Confirm**.
+- **Build:** tap **Build** to slide up the panel: tools first (each with a short note), then the town goals. Buy road and bridge pieces under Road or Bridge.
 - **Orders:** tap **Orders** at the top right.
-- **Buildings:** drag the ghost with your finger, lift to pin it, then tap **Confirm**.
+- **Buildings:** tap the map where it should go (or drag the ghost with your finger), then tap **Confirm**.
 
 ### Saving
 
@@ -72,7 +82,7 @@ You only need a web browser for this.
 
 ### 1. Put the files on GitHub
 
-1. Unzip the newest zip Claude sent (for example `lexington-v3.0.1.zip`) on your Mac. You get a folder called `wordcity`.
+1. Unzip the newest zip Claude sent (for example `lexington-v3.0.2.zip`) on your Mac. You get a folder called `wordcity`.
 2. Open your repository on GitHub. If it is still called `wordcity`, rename it first:
    1. Open **Settings** (the tab at the top of the repository).
    2. Under **Repository name**, type `lexington`.
@@ -136,9 +146,11 @@ npm run typecheck  # TypeScript check (not part of the Vercel build)
   - `src/game/landmarks.ts`: landmark milestones;
   - `src/game/terrainChange.ts`: growth and overflow, seeded from the map seed and the word count;
   - `src/game/founding.ts` (v3.0.1): where the town center is founded, for a new town and the v2 migration.
+- **The Roads button:** `src/ui/RoadsTray.tsx` (v3.0.2). The crossing rule is `checkPiece` and `sharedTiles` in `src/game/network.ts`.
+- **Phone viewport:** `src/ui/viewport.ts` (v3.0.2) keeps the app inside the visible area in mobile Safari (see the comment at the top of that file).
 - **The Pixi map:** `src/pixi/MapView.tsx` is the only component that touches Pixi; mounted once. Terrain changes repaint only the changed area of the baked texture (`bakeTerrain(..., { into, region })` in `src/pixi/terrainBake.ts`).
 - **Saves:** format version 3 in `src/game/save.ts`; the migration chain is v1 to v2 (marsh roads to bridges) then v2 to v3 (town center, legacy pieces, rack size, landmarks).
 - **Tutorial:** text and fixed data in `src/game/tutorial.ts` (every caption is marked BUILD WORDING for Stu to review), flow in `src/game/tutorialFlow.ts`.
-- **Placeholder art:** `scripts/art/make_placeholders.py` draws the Town Center, Scribe and landmark stand-ins; `src/assets/sprites.json` lists them under `placeholders`. Replace a PNG with the same name (or rerun `scripts/art/process_art.py` with the Gemini JPGs) and it is picked up with no code change. Stamps, the Rune tile and the Lantern icon are CSS and inline SVG placeholders (`src/styles.css`, `src/ui/Rack.tsx`); gravel is drawn in `drawGravel` in `src/pixi/terrainBake.ts`.
+- **v3 art:** `scripts/art/process_v3_art.py` cuts the Gemini v3 set (town-center.jpg, scribe.jpg, landmarks-sheet.jpg, overlays-sheet.jpg, terrain-foothills.jpg) into the existing slots: `python3 -I scripts/art/process_v3_art.py <folder with the JPGs> src/assets`. No placeholders are left in `src/assets/buildings/sprites.json`. Gravel is still drawn in code (`drawGravel` in `src/pixi/terrainBake.ts`).
 - **Boone's scripts:** `scripts/boone/economy_sim.py` (v2) and `scripts/boone/economy_sim_v3.py` (v3, written by Claude because Boone's v3 script was not in the Drive). From the repository root: `python3 scripts/boone/economy_sim_v3.py 400`.
 - **Tests:** `?testHooks` exposes the store, the save functions and the tutorial flow to automated browser tests.
