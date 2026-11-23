@@ -18,8 +18,11 @@ const TARGETS: Record<string, string> = {
   message: '[data-tour="message"]',
   'hud-resources': '[data-tour="hud-resources"]',
   'road-tool': '[data-tour="road-tool"]',
-  'cottage-card': '[data-tour="cottage-card"]',
-  'sawmill-card': '[data-tour="sawmill-card"]',
+  // (v3.0.2) The on-map Roads button: always on screen, never inside the closed sheet.
+  roads: '[data-tour="roads"]',
+  // The build steps also pulse the one-tap assist, which is on screen on the phone too.
+  'cottage-card': '[data-tour="cottage-card"], .tutorial-assist',
+  'sawmill-card': '[data-tour="sawmill-card"], .tutorial-assist',
   happiness: '[data-tour="happiness"]',
   hint: '[data-tour="hint"]',
 };
