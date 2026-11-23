@@ -153,9 +153,13 @@ export function attachCamera(opts: CameraOptions): CameraController {
   let painting = false;
   let secondary = false;
 
+  // (v3.0.2) Scaled by the canvas's own size against its on-screen size, so pointer positions stay
+  // right when the app is scaled to follow the visual viewport (src/ui/viewport.ts).
   const local = (e: PointerEvent | WheelEvent) => {
     const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const kx = r.width > 0 && canvas.clientWidth > 0 ? canvas.clientWidth / r.width : 1;
+    const ky = r.height > 0 && canvas.clientHeight > 0 ? canvas.clientHeight / r.height : 1;
+    return { x: (e.clientX - r.left) * kx, y: (e.clientY - r.top) * ky };
   };
 
   const onDown = (e: PointerEvent) => {
